@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Archaeological Samples Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+{{STYLES}}
+    </style>
+</head>
+<body>
+    <!-- Configuration injected by server -->
+    <script>
+        window.ArcheoGeneticMap = { config: {{CONFIG}} };
+    </script>
+    
+    <!-- Sidebar with Alpine.js -->
+    <div x-data="filterController()" x-init="init()" class="sidebar-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar" :class="{ 'collapsed': !sidebarOpen }">
+            <div class="sidebar-header">
+                <span>Filters & Controls</span>
+            </div>
+            
+            <div class="sidebar-content">
+                <!-- Date Range Filter -->
+                <div class="filter-section">
+                    <div class="filter-header" @click="sections.dateRange = !sections.dateRange">
+                        <span>Date Range (cal BP)</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.dateRange }">▼</span>
+                    </div>
+                    <div class="filter-body" x-show="sections.dateRange">
+                        <div class="range-container">
+                            <div class="range-values">
+                                <input type="number" 
+                                       class="range-input" 
+                                       x-model.number="filters.dateMax"
+                                       :max="dataRange.max"
+                                       :min="filters.dateMin"
+                                       @change="onDateChange()">
+                                <span class="range-separator">to</span>
+                                <input type="number" 
+                                       class="range-input" 
+                                       x-model.number="filters.dateMin"
+                                       :max="dataRange.max"
+                                       :min="filters.dateMax"
+                                       @change="onDateChange()">
+                            </div>
+                            
+                            <!-- Double range slider -->
+                            <div class="slider-track">
+                                <div class="slider-range" 
+                                     :style="sliderRangeStyle()"></div>
+                                <input type="range" 
+                                       class="slider-input"
+                                       :min="dataRange.min" 
+                                       :max="dataRange.max"
+                                       x-model.number="filters.dateMin"
+                                       @input="onDateChange()">
+                                <input type="range" 
+                                       class="slider-input"
+                                       :min="dataRange.min" 
+                                       :max="dataRange.max"
+                                       x-model.number="filters.dateMax"
+                                       @input="onDateChange()">
+                            </div>
+                            
+                            <div class="checkbox-row">
+                                <input type="checkbox" 
+                                       id="includeUndated" 
+                                       x-model="filters.includeUndated"
+                                       @change="applyFilters()">
+                                <label for="includeUndated">Include undated samples</label>
+                            </div>
+                            
+                            <div class="stats">
+                                <span x-text="filteredCount"></span> of <span x-text="totalCount"></span> samples shown
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Culture Filter (placeholder) -->
+                <div class="filter-section">
+                    <div class="filter-header" @click="sections.culture = !sections.culture">
+                        <span>Culture</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.culture }">▼</span>
+                    </div>
+                    <div class="filter-body" x-show="sections.culture">
+                        <p class="placeholder-text">Coming soon</p>
+                    </div>
+                </div>
+                
+                <!-- Y Haplogroup Filter (placeholder) -->
+                <div class="filter-section">
+                    <div class="filter-header" @click="sections.yHaplogroup = !sections.yHaplogroup">
+                        <span>Y Haplogroup</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.yHaplogroup }">▼</span>
+                    </div>
+                    <div class="filter-body" x-show="sections.yHaplogroup">
+                        <p class="placeholder-text">Coming soon</p>
+                    </div>
+                </div>
+                
+                <!-- mtDNA Filter (placeholder) -->
+                <div class="filter-section">
+                    <div class="filter-header" @click="sections.mtdna = !sections.mtdna">
+                        <span>mtDNA</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.mtdna }">▼</span>
+                    </div>
+                    <div class="filter-body" x-show="sections.mtdna">
+                        <p class="placeholder-text">Coming soon</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <strong x-text="filteredCount"></strong> samples displayed
+            </div>
+        </aside>
+        
+        <!-- Sidebar toggle button -->
+        <button class="sidebar-toggle" 
+                :class="{ 'collapsed': !sidebarOpen }"
+                @click="sidebarOpen = !sidebarOpen">
+            <span x-text="sidebarOpen ? '◀' : '▶'"></span>
+        </button>
+    </div>
+    
+    <!-- Map container -->
+    <div id="map"></div>
+    
+    <!-- Leaflet and application scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+{{SCRIPTS}}
+    </script>
+</body>
+</html>

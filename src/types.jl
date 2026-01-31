@@ -1,0 +1,118 @@
+"""
+    ArcheoGeneticMap.Types
+
+Core data structures for archaeological map visualization.
+"""
+
+export MapBounds, MapSettings, MapConfig, TilePreset, TILE_PRESETS
+
+"""
+    MapBounds
+
+Represents the geographic bounding box for map display.
+"""
+struct MapBounds
+    min_lon::Float64
+    max_lon::Float64
+    min_lat::Float64
+    max_lat::Float64
+end
+
+"""
+    MapSettings
+
+Configuration for map display and styling.
+
+# Fields
+- `padding`: Extra space around data bounds (degrees)
+- `initial_zoom`: Starting zoom level (1-18)
+- `point_color`: CSS color for markers
+- `point_radius`: Marker radius in pixels
+- `tile_url`: URL template for tile server
+- `tile_attribution`: Attribution text for tiles
+"""
+struct MapSettings
+    padding::Float64
+    initial_zoom::Int
+    point_color::String
+    point_radius::Int
+    tile_url::String
+    tile_attribution::String
+end
+
+"""
+    MapSettings(; kwargs...)
+
+Construct MapSettings with keyword arguments and sensible defaults.
+"""
+function MapSettings(;
+    padding::Float64 = 5.0,
+    initial_zoom::Int = 6,
+    point_color::String = "#e41a1c",
+    point_radius::Int = 6,
+    tile_url::String = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    tile_attribution::String = "© OpenStreetMap contributors"
+)
+    MapSettings(padding, initial_zoom, point_color, point_radius, tile_url, tile_attribution)
+end
+
+"""
+    TilePreset
+
+Named tile layer configuration.
+"""
+struct TilePreset
+    name::String
+    url::String
+    attribution::String
+end
+
+"""
+Pre-configured tile layer options.
+"""
+const TILE_PRESETS = Dict{Symbol, TilePreset}(
+    :osm => TilePreset(
+        "OpenStreetMap",
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "© OpenStreetMap contributors"
+    ),
+    :topo => TilePreset(
+        "OpenTopoMap", 
+        "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        "© OpenStreetMap contributors, © OpenTopoMap"
+    ),
+    :humanitarian => TilePreset(
+        "Humanitarian",
+        "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+        "© OpenStreetMap contributors"
+    )
+)
+
+"""
+    MapSettings(preset::Symbol; kwargs...)
+
+Create MapSettings from a tile preset, with optional overrides.
+"""
+function MapSettings(preset::Symbol; kwargs...)
+    tile = get(TILE_PRESETS, preset, TILE_PRESETS[:osm])
+    MapSettings(;
+        tile_url = tile.url,
+        tile_attribution = tile.attribution,
+        kwargs...
+    )
+end
+
+"""
+    MapConfig
+
+Complete configuration for rendering a map, including computed values.
+Used to pass data from Julia to the template layer.
+"""
+struct MapConfig
+    center_lat::Float64
+    center_lon::Float64
+    zoom::Int
+    min_age::Float64
+    max_age::Float64
+    settings::MapSettings
+end
