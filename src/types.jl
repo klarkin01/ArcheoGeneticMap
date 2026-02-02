@@ -125,6 +125,17 @@ struct DateStatistics
 end
 
 """
+    CultureStatistics
+
+Statistics about unique cultures in the dataset.
+"""
+struct CultureStatistics
+    #unique_cultures::Int
+    #culture_counts::Dict{String, Int}
+    culture_names::Vector{String}
+end
+
+"""
     MapConfig
 
 Complete configuration for rendering a map, including computed values.
@@ -135,5 +146,6 @@ struct MapConfig
     center_lon::Float64
     zoom::Int
     date_stats::DateStatistics
+    culture_stats::CultureStatistics
     settings::MapSettings
 end

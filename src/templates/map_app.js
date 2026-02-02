@@ -145,7 +145,7 @@ function filterController() {
         // ---------------------------------------------------------------------
         sidebarOpen: true,
         sections: {
-            dateRange: true,
+            dateRange: false,
             culture: false,
             yHaplogroup: false,
             mtdna: false
@@ -183,10 +183,9 @@ function filterController() {
         },
         
         // Slider positions (0-1000 scale)
-        // With cal BP: left side (0) = youngest/smallest, right side (1000) = oldest/largest
         sliderPositions: {
-            min: PiecewiseScale.SLIDER_MIN,  // left side = younger (small BP values)
-            max: PiecewiseScale.SLIDER_MAX   // right side = older (large BP values)
+            min: PiecewiseScale.SLIDER_MIN,  // right side = younger (small BP values)
+            max: PiecewiseScale.SLIDER_MAX   // left side = older (large BP values)
         },
         
         // ---------------------------------------------------------------------

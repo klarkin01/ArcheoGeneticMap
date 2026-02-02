@@ -50,18 +50,18 @@
                             </div>
                             
                             <!-- Double range slider with piecewise scaling -->
-                            <!-- Cal BP: left = youngest (small BP), right = oldest (large BP) -->
+                            <!-- Cal BP: right = youngest (small BP), leftt = oldest (large BP) -->
                             <div class="slider-track">
                                 <div class="slider-range" 
                                      :style="sliderRangeStyle()"></div>
-                                <!-- Younger bound slider (left side, small BP values) -->
+                                <!-- Younger bound slider (right side, small BP values) -->
                                 <input type="range" 
                                        class="slider-input"
                                        min="0" 
                                        max="1000"
                                        x-model.number="sliderPositions.min"
                                        @input="onSliderInput('min')">
-                                <!-- Older bound slider (right side, large BP values) -->
+                                <!-- Older bound slider (left side, large BP values) -->
                                 <input type="range" 
                                        class="slider-input"
                                        min="0" 

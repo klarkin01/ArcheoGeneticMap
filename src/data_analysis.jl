@@ -70,3 +70,21 @@ function calculate_date_statistics(geojson::Dict)
         ages[p98_idx]   # 98th percentile
     )
 end
+
+"""
+    identify_unique_cultures(geojson::Dict) -> Vector{String}
+
+Identify unique culture names from a GeoJSON FeatureCollection.
+Returns a sorted vector of unique culture names, excluding missing or empty values.
+"""
+function identify_unique_cultures(geojson::Dict)
+    culture_set = Set{String}()
+    for feature in geojson["features"]
+        culture = get(feature["properties"], "culture", nothing)
+        if culture !== nothing && !ismissing(culture) && culture != ""
+            push!(culture_set, String(culture))
+        end
+    end
+    sorted_set = sort(collect(culture_set))
+    return CultureStatistics(sorted_set)
+end
