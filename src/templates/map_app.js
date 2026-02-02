@@ -4,7 +4,12 @@
  * Frontend application using Alpine.js for state management
  * and Leaflet for map rendering.
  * 
- * Expects window.ArcheoGeneticMap_CONFIG to be set with:
+ * Dependencies (loaded before this file via templates.jl):
+ *   - ColorRamps: Color ramp definitions and interpolation
+ *   - PiecewiseScale: Slider-to-value conversion with outlier compression
+ *   - PopupBuilder: HTML popup generation for map markers
+ * 
+ * Expects window.ArcheoGeneticMap.config to be set with:
  *   - center: [lat, lon]
  *   - zoom: initial zoom level
  *   - dateRange: { min, max } in cal BP
@@ -19,7 +24,7 @@ let map = null;
 let dataLayer = null;
 
 /**
- * Initialize the Leaflet map with configuration from ARCHEOMAP_CONFIG
+ * Initialize the Leaflet map with configuration from ArcheoGeneticMap.config
  */
 function initMap() {
     const config = window.ArcheoGeneticMap.config;
@@ -47,12 +52,48 @@ function initMap() {
 }
 
 /**
+ * Get color for a feature based on its age and current filter settings
+ * @param {number|null} age - Age value in cal BP (larger = older, smaller = younger)
+ * @param {Object} colorSettings - Object with colorRampEnabled, selectedColorRamp, dateMin, dateMax
+ * @param {string} defaultColor - Default color when ramp is disabled
+ * @returns {string} Hex color string
+ */
+function getFeatureColor(age, colorSettings, defaultColor) {
+    if (!colorSettings.colorRampEnabled) {
+        return defaultColor;
+    }
+    
+    if (age === null || age === undefined) {
+        return defaultColor;
+    }
+    
+    // Data convention: cal BP (Before Present)
+    // Larger numbers = OLDER (more ancient), smaller numbers = YOUNGER (more recent)
+    // dateMin = smaller number = younger bound
+    // dateMax = larger number = older bound
+    
+    const youngerBound = colorSettings.dateMin;  // smaller numeric value = more recent
+    const olderBound = colorSettings.dateMax;    // larger numeric value = older
+    const range = olderBound - youngerBound;
+    
+    if (range === 0) {
+        return ColorRamps.interpolate(colorSettings.selectedColorRamp, 0.5);
+    }
+    
+    // Normalize: t=0 for oldest samples (large BP), t=1 for youngest samples (small BP)
+    const t = (olderBound - age) / range;
+    
+    return ColorRamps.interpolate(colorSettings.selectedColorRamp, t);
+}
+
+/**
  * Update the map layer with filtered features
  * @param {Array} features - GeoJSON features to display
+ * @param {Object} colorSettings - Color ramp settings
  */
-function updateMapLayer(features) {
+function updateMapLayer(features, colorSettings = null) {
     const config = window.ArcheoGeneticMap.config;
-    const pointColor = config.style.pointColor;
+    const defaultColor = config.style.pointColor;
     const pointRadius = config.style.pointRadius;
     
     // Remove existing layer
@@ -68,43 +109,24 @@ function updateMapLayer(features) {
     
     dataLayer = L.geoJSON(geojson, {
         pointToLayer: function(feature, latlng) {
+            const age = feature.properties.average_age_calbp;
+            const color = colorSettings 
+                ? getFeatureColor(age, colorSettings, defaultColor)
+                : defaultColor;
+            
             return L.circleMarker(latlng, {
                 radius: pointRadius,
-                fillColor: pointColor,
-                color: pointColor,
+                fillColor: color,
+                color: color,
                 weight: 1,
                 opacity: 1,
                 fillOpacity: 0.7
             });
         },
         onEachFeature: function(feature, layer) {
-            layer.bindPopup(buildPopupContent(feature.properties));
+            layer.bindPopup(PopupBuilder.build(feature.properties));
         }
     }).addTo(map);
-}
-
-/**
- * Build HTML popup content from feature properties
- * @param {Object} props - Feature properties
- * @returns {string} HTML string for popup
- */
-function buildPopupContent(props) {
-    let content = '<b>Sample ID:</b> ' + props.sample_id;
-    
-    if (props.average_age_calbp) {
-        content += '<br><b>Age:</b> ' + props.average_age_calbp + ' cal BP';
-    }
-    if (props.culture) {
-        content += '<br><b>Culture:</b> ' + props.culture;
-    }
-    if (props.y_haplogroup) {
-        content += '<br><b>Y Haplogroup:</b> ' + props.y_haplogroup;
-    }
-    if (props.mtdna) {
-        content += '<br><b>mtDNA:</b> ' + props.mtdna;
-    }
-    
-    return content;
 }
 
 // =============================================================================
@@ -135,22 +157,44 @@ function filterController() {
         allFeatures: [],
         filteredFeatures: [],
         
-        // Data range (will be recalculated from actual data)
+        // Full data range and percentiles (from server)
         dataRange: {
             min: config.dateRange.min,
             max: config.dateRange.max
         },
         
+        // Percentile bounds for piecewise scaling (from server)
+        percentiles: {
+            p2: config.dateRange.p2,
+            p98: config.dateRange.p98
+        },
+        
+        // Piecewise scale instance (created on init with server-provided values)
+        dateScale: null,
+        
         // ---------------------------------------------------------------------
         // Filter State
         // ---------------------------------------------------------------------
         filters: {
-            // Note: dateMin is the MORE RECENT date (smaller BP number)
-            // dateMax is the OLDER date (larger BP number)
-            dateMin: config.dateRange.max,
-            dateMax: config.dateRange.min,
-            includeUndated: true
+            // Actual date values for filtering (cal BP: larger = older)
+            dateMin: config.dateRange.min,  // younger bound (smaller BP value)
+            dateMax: config.dateRange.max,  // older bound (larger BP value)
+            includeUndated: Config.defaults.includeUndated
         },
+        
+        // Slider positions (0-1000 scale)
+        // With cal BP: left side (0) = youngest/smallest, right side (1000) = oldest/largest
+        sliderPositions: {
+            min: PiecewiseScale.SLIDER_MIN,  // left side = younger (small BP values)
+            max: PiecewiseScale.SLIDER_MAX   // right side = older (large BP values)
+        },
+        
+        // ---------------------------------------------------------------------
+        // Color Ramp State
+        // ---------------------------------------------------------------------
+        colorRampEnabled: Config.defaults.colorRampEnabled,
+        selectedColorRamp: Config.defaults.colorRamp,
+        availableColorRamps: ColorRamps.options(),
         
         // ---------------------------------------------------------------------
         // Computed Properties
@@ -163,6 +207,18 @@ function filterController() {
             return this.filteredFeatures.length;
         },
         
+        /**
+         * Get current color settings for map rendering
+         */
+        get colorSettings() {
+            return {
+                colorRampEnabled: this.colorRampEnabled,
+                selectedColorRamp: this.selectedColorRamp,
+                dateMin: this.filters.dateMin,
+                dateMax: this.filters.dateMax
+            };
+        },
+        
         // ---------------------------------------------------------------------
         // Lifecycle
         // ---------------------------------------------------------------------
@@ -173,15 +229,31 @@ function filterController() {
                 // Initialize the Leaflet map
                 initMap();
                 
+                // Create the piecewise scale using server-provided statistics
+                this.dateScale = PiecewiseScale.create(
+                    this.dataRange.min,
+                    this.dataRange.max,
+                    this.percentiles.p2,
+                    this.percentiles.p98
+                );
+                
+                // Set initial filter range (p2 to p98 for better default view)
+                this.filters.dateMin = this.percentiles.p2;
+                this.filters.dateMax = this.percentiles.p98;
+                
+                // Set initial slider positions to match
+                this.sliderPositions.min = this.dateScale.toSlider(this.filters.dateMin);
+                this.sliderPositions.max = this.dateScale.toSlider(this.filters.dateMax);
+                
+                console.log('Date range:', this.dataRange);
+                console.log('Percentiles:', this.percentiles);
+                
                 // Fetch sample data from API
                 console.log('Fetching data from /api/samples...');
                 const response = await fetch('/api/samples');
                 const data = await response.json();
                 this.allFeatures = data.features;
                 console.log('Loaded ' + this.allFeatures.length + ' features');
-                
-                // Recalculate date range from actual loaded data
-                this.recalculateDateRange();
                 
                 // Apply initial filters
                 this.applyFilters();
@@ -197,52 +269,87 @@ function filterController() {
         // ---------------------------------------------------------------------
         
         /**
-         * Recalculate the date range from loaded features
+         * Handle slider input changes
+         * Converts slider position to date value and updates filters
+         * Cal BP: slider left (0) = youngest, slider right (1000) = oldest
          */
-        recalculateDateRange() {
-            const ages = this.allFeatures
-                .map(f => f.properties.average_age_calbp)
-                .filter(a => a !== null && a !== undefined);
+        onSliderInput(which) {
+            if (!this.dateScale) return;
             
-            if (ages.length > 0) {
-                this.dataRange.min = Math.min(...ages);
-                this.dataRange.max = Math.max(...ages);
-                this.filters.dateMin = this.dataRange.max;
-                this.filters.dateMax = this.dataRange.min;
-                console.log('Date range: ' + this.dataRange.min + ' to ' + this.dataRange.max);
+            if (which === 'min') {
+                // "min" slider controls the younger/left bound (smaller BP values)
+                this.filters.dateMin = Math.round(this.dateScale.toValue(this.sliderPositions.min));
+            } else {
+                // "max" slider controls the older/right bound (larger BP values)
+                this.filters.dateMax = Math.round(this.dateScale.toValue(this.sliderPositions.max));
             }
-        },
-        
-        /**
-         * Handle date filter input changes
-         * Ensures dateMin >= dateMax (in BP terms, more recent <= older)
-         */
-        onDateChange() {
-            // Ensure proper ordering (dateMax should be <= dateMin in terms of BP values)
-            if (this.filters.dateMin < this.filters.dateMax) {
+            
+            // Ensure proper ordering: dateMin should be <= dateMax (younger <= older in BP)
+            if (this.filters.dateMin > this.filters.dateMax) {
                 const temp = this.filters.dateMin;
                 this.filters.dateMin = this.filters.dateMax;
                 this.filters.dateMax = temp;
+                // Also swap slider positions
+                const tempSlider = this.sliderPositions.min;
+                this.sliderPositions.min = this.sliderPositions.max;
+                this.sliderPositions.max = tempSlider;
             }
             
             this.applyFilters();
         },
         
         /**
+         * Handle direct date input changes (from number inputs)
+         * Updates slider positions to match
+         * Cal BP: dateMin = younger (smaller), dateMax = older (larger)
+         */
+        onDateChange() {
+            if (!this.dateScale) return;
+            
+            // Ensure proper ordering: dateMin <= dateMax (younger <= older in BP)
+            if (this.filters.dateMin > this.filters.dateMax) {
+                const temp = this.filters.dateMin;
+                this.filters.dateMin = this.filters.dateMax;
+                this.filters.dateMax = temp;
+            }
+            
+            // Clamp to data range
+            this.filters.dateMin = this.dateScale.clamp(this.filters.dateMin);
+            this.filters.dateMax = this.dateScale.clamp(this.filters.dateMax);
+            
+            // Update slider positions
+            this.sliderPositions.min = this.dateScale.toSlider(this.filters.dateMin);
+            this.sliderPositions.max = this.dateScale.toSlider(this.filters.dateMax);
+            
+            this.applyFilters();
+        },
+        
+        /**
+         * Handle color ramp toggle or selection change
+         */
+        onColorRampChange() {
+            // Re-render the map with current features and new color settings
+            updateMapLayer(this.filteredFeatures, this.colorSettings);
+        },
+        
+        /**
          * Calculate CSS style for the slider range highlight
-         * @returns {Object} CSS style object with left and width percentages
+         * Uses slider positions directly (already in 0-1000 scale)
+         * Cal BP: sliderPositions.min = left/younger, sliderPositions.max = right/older
          */
         sliderRangeStyle() {
-            const range = this.dataRange.max - this.dataRange.min;
-            if (range === 0) return { left: '0%', width: '100%' };
-            
-            const leftPercent = ((this.filters.dateMax - this.dataRange.min) / range) * 100;
-            const rightPercent = ((this.filters.dateMin - this.dataRange.min) / range) * 100;
-            
-            return {
-                left: leftPercent + '%',
-                width: (rightPercent - leftPercent) + '%'
-            };
+            if (!this.dateScale) {
+                return { left: '0%', width: '100%' };
+            }
+            return this.dateScale.rangeStyle(this.sliderPositions.min, this.sliderPositions.max);
+        },
+        
+        /**
+         * Generate a preview gradient for the selected color ramp
+         * @returns {string} CSS linear-gradient string
+         */
+        colorRampGradient() {
+            return ColorRamps.gradient(this.selectedColorRamp);
         },
         
         // ---------------------------------------------------------------------
@@ -261,14 +368,15 @@ function filterController() {
                 // && this.passesMtdnaFilter(feature)
             });
             
-            // Update the map display
-            updateMapLayer(this.filteredFeatures);
+            // Update the map display with color settings
+            updateMapLayer(this.filteredFeatures, this.colorSettings);
         },
         
         /**
          * Check if a feature passes the date filter
          * @param {Object} feature - GeoJSON feature
          * @returns {boolean} True if feature passes the filter
+         * Cal BP: dateMin = younger/smaller value, dateMax = older/larger value
          */
         passesDateFilter(feature) {
             const age = feature.properties.average_age_calbp;
@@ -279,8 +387,8 @@ function filterController() {
             }
             
             // Check if within range
-            // Remember: dateMax is the OLDER date (larger BP), dateMin is MORE RECENT (smaller BP)
-            return age >= this.filters.dateMax && age <= this.filters.dateMin;
+            // dateMin is the younger/smaller BP value, dateMax is the older/larger BP value
+            return age >= this.filters.dateMin && age <= this.filters.dateMax;
         }
         
         // Future filter methods will be added here:

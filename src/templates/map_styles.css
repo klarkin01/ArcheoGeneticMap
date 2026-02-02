@@ -214,6 +214,53 @@ body {
 }
 
 /* ==========================================================================
+   Color Ramp Controls
+   ========================================================================== */
+
+.color-ramp-controls {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e9ecef;
+}
+
+.color-ramp-options {
+    margin-top: 12px;
+    padding-left: 24px;
+}
+
+.color-ramp-select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #495057;
+    background: white;
+    cursor: pointer;
+}
+
+.color-ramp-select:focus {
+    outline: none;
+    border-color: #80bdff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.color-ramp-preview {
+    height: 16px;
+    border-radius: 4px;
+    margin-top: 10px;
+    border: 1px solid #dee2e6;
+}
+
+.color-ramp-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #6c757d;
+    margin-top: 4px;
+}
+
+/* ==========================================================================
    Toggle Button
    ========================================================================== */
 

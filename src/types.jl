@@ -4,7 +4,11 @@
 Core data structures for archaeological map visualization.
 """
 
-export MapBounds, MapSettings, MapConfig, TilePreset, TILE_PRESETS
+# Import config constants (config.jl must be included before this file)
+# Uses: DEFAULT_PADDING, DEFAULT_ZOOM, DEFAULT_POINT_COLOR, DEFAULT_POINT_RADIUS,
+#       DEFAULT_TILE_URL, DEFAULT_TILE_ATTRIBUTION
+
+export MapBounds, MapSettings, MapConfig, DateStatistics, TilePreset, TILE_PRESETS
 
 """
     MapBounds
@@ -46,12 +50,12 @@ end
 Construct MapSettings with keyword arguments and sensible defaults.
 """
 function MapSettings(;
-    padding::Float64 = 5.0,
-    initial_zoom::Int = 6,
-    point_color::String = "#e41a1c",
-    point_radius::Int = 6,
-    tile_url::String = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    tile_attribution::String = "© OpenStreetMap contributors"
+    padding::Float64 = DEFAULT_PADDING,
+    initial_zoom::Int = DEFAULT_ZOOM,
+    point_color::String = DEFAULT_POINT_COLOR,
+    point_radius::Int = DEFAULT_POINT_RADIUS,
+    tile_url::String = DEFAULT_TILE_URL,
+    tile_attribution::String = DEFAULT_TILE_ATTRIBUTION
 )
     MapSettings(padding, initial_zoom, point_color, point_radius, tile_url, tile_attribution)
 end
@@ -103,6 +107,24 @@ function MapSettings(preset::Symbol; kwargs...)
 end
 
 """
+    DateStatistics
+
+Statistics about the date range of samples, used for piecewise slider scaling.
+
+# Fields
+- `min`: Absolute minimum age (youngest sample)
+- `max`: Absolute maximum age (oldest sample)
+- `p2`: 2nd percentile age (for slider compression)
+- `p98`: 98th percentile age (for slider compression)
+"""
+struct DateStatistics
+    min::Float64
+    max::Float64
+    p2::Float64
+    p98::Float64
+end
+
+"""
     MapConfig
 
 Complete configuration for rendering a map, including computed values.
@@ -112,7 +134,6 @@ struct MapConfig
     center_lat::Float64
     center_lon::Float64
     zoom::Int
-    min_age::Float64
-    max_age::Float64
+    date_stats::DateStatistics
     settings::MapSettings
 end

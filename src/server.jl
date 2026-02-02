@@ -80,15 +80,14 @@ function serve_map_response(settings::MapSettings)
     geojson = read_geopackage(filepath)
     bounds = calculate_bounds(geojson, settings.padding)
     center_lat, center_lon = calculate_center(bounds)
-    min_age, max_age = calculate_date_range(geojson)
+    date_stats = calculate_date_statistics(geojson)
     
     # Build configuration
     config = MapConfig(
         center_lat,
         center_lon,
         settings.initial_zoom,
-        min_age,
-        max_age,
+        date_stats,
         settings
     )
     

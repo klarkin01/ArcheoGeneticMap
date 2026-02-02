@@ -4,7 +4,10 @@
 Spatial calculations and utility functions.
 """
 
-export calculate_bounds, calculate_center, calculate_date_range
+# Import config constants (config.jl must be included before this file)
+# Uses: DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
+
+export calculate_bounds, calculate_center
 
 # MapBounds is defined in types.jl and available in the same module scope
 
@@ -43,32 +46,6 @@ function calculate_center(bounds::MapBounds)
     center_lat = (bounds.min_lat + bounds.max_lat) / 2
     center_lon = (bounds.min_lon + bounds.max_lon) / 2
     return (center_lat, center_lon)
-end
-
-"""
-    calculate_date_range(geojson::Dict) -> Tuple{Float64, Float64}
-
-Extract the minimum and maximum ages from a GeoJSON FeatureCollection.
-Returns (min_age, max_age) in cal BP.
-
-If no dated samples exist, returns (0.0, 50000.0) as a reasonable default
-for archaeological data.
-"""
-function calculate_date_range(geojson::Dict)
-    ages = Float64[]
-    
-    for feature in geojson["features"]
-        age = get(feature["properties"], "average_age_calbp", nothing)
-        if age !== nothing && !ismissing(age)
-            push!(ages, Float64(age))
-        end
-    end
-    
-    if isempty(ages)
-        return (0.0, 50000.0)
-    end
-    
-    return (minimum(ages), maximum(ages))
 end
 
 """

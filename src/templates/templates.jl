@@ -60,8 +60,10 @@ function build_config_json(config)
         "center" => [config.center_lat, config.center_lon],
         "zoom" => config.zoom,
         "dateRange" => Dict(
-            "min" => config.min_age,
-            "max" => config.max_age
+            "min" => config.date_stats.min,
+            "max" => config.date_stats.max,
+            "p2" => config.date_stats.p2,
+            "p98" => config.date_stats.p98
         ),
         "style" => Dict(
             "pointColor" => config.settings.point_color,
@@ -72,6 +74,35 @@ function build_config_json(config)
     )
     
     return JSON3.write(config_dict)
+end
+
+# JavaScript modules to load, in dependency order
+# Config must come first as other modules depend on it
+const JS_MODULES = [
+    "config.js",           # No dependencies - must be first
+    "color_ramps.js",      # Depends on Config
+    "piecewise_scale.js",  # Depends on Config
+    "popup_builder.js",    # No dependencies
+    "map_app.js"           # Depends on all above
+]
+
+"""
+    load_javascript_modules(; cache::Bool=true) -> String
+
+Load and concatenate all JavaScript modules in dependency order.
+Returns a single string ready for injection into the HTML template.
+"""
+function load_javascript_modules(; cache::Bool=true)
+    modules = String[]
+    
+    for filename in JS_MODULES
+        content = load_template(filename; cache=cache)
+        push!(modules, "// ============ $(filename) ============")
+        push!(modules, content)
+        push!(modules, "")  # blank line between modules
+    end
+    
+    return join(modules, "\n")
 end
 
 """
@@ -89,7 +120,9 @@ function render_map_html(config)
     # Load template components
     html_template = load_template("map_base.html")
     css_content = load_template("map_styles.css")
-    js_content = load_template("map_app.js")
+    
+    # Load and concatenate JavaScript modules
+    js_content = load_javascript_modules()
     
     # Build configuration JSON
     config_json = build_config_json(config)
@@ -105,7 +138,7 @@ function render_map_html(config)
 end
 
 """
-    render_map_html(; center_lat, center_lon, zoom, min_age, max_age, settings) -> String
+    render_map_html(; center_lat, center_lon, zoom, date_stats, settings) -> String
 
 Convenience method to render map HTML from individual parameters.
 """
@@ -113,10 +146,9 @@ function render_map_html(;
     center_lat::Float64,
     center_lon::Float64,
     zoom::Int,
-    min_age::Float64,
-    max_age::Float64,
+    date_stats::DateStatistics,
     settings::MapSettings
 )
-    config = MapConfig(center_lat, center_lon, zoom, min_age, max_age, settings)
+    config = MapConfig(center_lat, center_lon, zoom, date_stats, settings)
     return render_map_html(config)
 end

@@ -30,6 +30,13 @@ using ArcheoGeneticMap
         custom = MapSettings(padding=2.0, point_color="#0000ff")
         @test custom.padding == 2.0
         @test custom.point_color == "#0000ff"
+        
+        # Test DateStatistics construction
+        date_stats = DateStatistics(100.0, 10000.0, 500.0, 9000.0)
+        @test date_stats.min == 100.0
+        @test date_stats.max == 10000.0
+        @test date_stats.p2 == 500.0
+        @test date_stats.p98 == 9000.0
     end
     
     @testset "Geometry" begin
@@ -101,6 +108,43 @@ using ArcheoGeneticMap
         min_age, max_age = calculate_date_range(geojson_no_dates)
         @test min_age == 0.0
         @test max_age == 50000.0
+        
+        # Test calculate_date_statistics
+        stats = calculate_date_statistics(geojson_with_dates)
+        @test stats.min == 5000.0
+        @test stats.max == 10000.0
+        @test stats.p2 >= stats.min
+        @test stats.p98 <= stats.max
+        @test stats.p2 <= stats.p98
+        
+        # Test calculate_date_statistics with larger dataset
+        many_features = [
+            Dict(
+                "type" => "Feature",
+                "geometry" => Dict("type" => "Point", "coordinates" => [0.0, 0.0]),
+                "properties" => Dict("average_age_calbp" => Float64(i * 100))
+            )
+            for i in 1:100
+        ]
+        geojson_many = Dict(
+            "type" => "FeatureCollection",
+            "features" => many_features
+        )
+        
+        stats_many = calculate_date_statistics(geojson_many)
+        @test stats_many.min == 100.0
+        @test stats_many.max == 10000.0
+        @test stats_many.p2 < stats_many.p98
+        # p2 should be near the low end, p98 near the high end
+        @test stats_many.p2 < 1000.0
+        @test stats_many.p98 > 9000.0
+        
+        # Test date statistics with no dated samples
+        stats_no_dates = calculate_date_statistics(geojson_no_dates)
+        @test stats_no_dates.min == 0.0
+        @test stats_no_dates.max == 50000.0
+        # When no samples, p2 and p98 should equal midpoint
+        @test stats_no_dates.p2 == stats_no_dates.p98
     end
     
     @testset "Templates" begin
@@ -109,18 +153,24 @@ using ArcheoGeneticMap
         @test isfile(joinpath(template_path, "map_base.html"))
         @test isfile(joinpath(template_path, "map_styles.css"))
         @test isfile(joinpath(template_path, "map_app.js"))
+        @test isfile(joinpath(template_path, "config.js"))
         
         # Test config rendering
         settings = MapSettings()
-        config = MapConfig(45.0, -75.0, 6, 5000.0, 15000.0, settings)
+        date_stats = DateStatistics(5000.0, 15000.0, 6000.0, 14000.0)
+        config = MapConfig(45.0, -75.0, 6, date_stats, settings)
         
         html = render_map_html(config)
         
         # Check that key elements are present
-        @test occursin("ArcheoGeneticMap_CONFIG", html)
+        @test occursin("ArcheoGeneticMap", html)
         @test occursin("filterController", html)
         @test occursin("leaflet", lowercase(html))
         @test occursin("#e41a1c", html)  # default point color
+        
+        # Check that date statistics are in the config
+        @test occursin("\"p2\"", html)
+        @test occursin("\"p98\"", html)
     end
 end
 

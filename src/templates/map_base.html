@@ -38,33 +38,36 @@
                                        class="range-input" 
                                        x-model.number="filters.dateMax"
                                        :max="dataRange.max"
-                                       :min="filters.dateMin"
+                                       :min="dataRange.min"
                                        @change="onDateChange()">
                                 <span class="range-separator">to</span>
                                 <input type="number" 
                                        class="range-input" 
                                        x-model.number="filters.dateMin"
                                        :max="dataRange.max"
-                                       :min="filters.dateMax"
+                                       :min="dataRange.min"
                                        @change="onDateChange()">
                             </div>
                             
-                            <!-- Double range slider -->
+                            <!-- Double range slider with piecewise scaling -->
+                            <!-- Cal BP: left = youngest (small BP), right = oldest (large BP) -->
                             <div class="slider-track">
                                 <div class="slider-range" 
                                      :style="sliderRangeStyle()"></div>
+                                <!-- Younger bound slider (left side, small BP values) -->
                                 <input type="range" 
                                        class="slider-input"
-                                       :min="dataRange.min" 
-                                       :max="dataRange.max"
-                                       x-model.number="filters.dateMin"
-                                       @input="onDateChange()">
+                                       min="0" 
+                                       max="1000"
+                                       x-model.number="sliderPositions.min"
+                                       @input="onSliderInput('min')">
+                                <!-- Older bound slider (right side, large BP values) -->
                                 <input type="range" 
                                        class="slider-input"
-                                       :min="dataRange.min" 
-                                       :max="dataRange.max"
-                                       x-model.number="filters.dateMax"
-                                       @input="onDateChange()">
+                                       min="0" 
+                                       max="1000"
+                                       x-model.number="sliderPositions.max"
+                                       @input="onSliderInput('max')">
                             </div>
                             
                             <div class="checkbox-row">
@@ -73,6 +76,34 @@
                                        x-model="filters.includeUndated"
                                        @change="applyFilters()">
                                 <label for="includeUndated">Include undated samples</label>
+                            </div>
+                            
+                            <!-- Color Ramp Controls -->
+                            <div class="color-ramp-controls">
+                                <div class="checkbox-row">
+                                    <input type="checkbox" 
+                                           id="colorRampEnabled" 
+                                           x-model="colorRampEnabled"
+                                           @change="onColorRampChange()">
+                                    <label for="colorRampEnabled">Color by age</label>
+                                </div>
+                                
+                                <div class="color-ramp-options" x-show="colorRampEnabled" x-transition>
+                                    <select class="color-ramp-select"
+                                            x-model="selectedColorRamp"
+                                            @change="onColorRampChange()">
+                                        <template x-for="ramp in availableColorRamps" :key="ramp.value">
+                                            <option :value="ramp.value" x-text="ramp.label"></option>
+                                        </template>
+                                    </select>
+                                    
+                                    <!-- Color ramp preview -->
+                                    <div class="color-ramp-preview" :style="{ background: colorRampGradient() }"></div>
+                                    <div class="color-ramp-labels">
+                                        <span>Older</span>
+                                        <span>Younger</span>
+                                    </div>
+                                </div>
                             </div>
                             
                             <div class="stats">
