@@ -66,7 +66,7 @@ include("server.jl")
 # =============================================================================
 
 # Re-export key types
-export MapBounds, MapSettings, MapConfig, DateStatistics, TilePreset, TILE_PRESETS
+export MapBounds, MapSettings, MapConfig, DateStatistics, CultureStatistics, TilePreset, TILE_PRESETS
 
 # Re-export IO functions
 export read_geopackage
@@ -75,7 +75,7 @@ export read_geopackage
 export calculate_bounds, calculate_center
 
 # Re-export data analysis functions
-export calculate_date_range, calculate_date_statistics
+export calculate_date_range, calculate_date_statistics, calculate_culture_statistics
 
 # Re-export template functions
 export render_map_html, clear_template_cache

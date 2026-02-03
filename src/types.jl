@@ -8,7 +8,7 @@ Core data structures for archaeological map visualization.
 # Uses: DEFAULT_PADDING, DEFAULT_ZOOM, DEFAULT_POINT_COLOR, DEFAULT_POINT_RADIUS,
 #       DEFAULT_TILE_URL, DEFAULT_TILE_ATTRIBUTION
 
-export MapBounds, MapSettings, MapConfig, DateStatistics, TilePreset, TILE_PRESETS
+export MapBounds, MapSettings, MapConfig, DateStatistics, CultureStatistics, TilePreset, TILE_PRESETS
 
 """
     MapBounds
@@ -78,17 +78,17 @@ const TILE_PRESETS = Dict{Symbol, TilePreset}(
     :osm => TilePreset(
         "OpenStreetMap",
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "© OpenStreetMap contributors"
+        "Â© OpenStreetMap contributors"
     ),
     :topo => TilePreset(
         "OpenTopoMap", 
         "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "© OpenStreetMap contributors, © OpenTopoMap"
+        "Â© OpenStreetMap contributors, Â© OpenTopoMap"
     ),
     :humanitarian => TilePreset(
         "Humanitarian",
         "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
-        "© OpenStreetMap contributors"
+        "Â© OpenStreetMap contributors"
     )
 )
 

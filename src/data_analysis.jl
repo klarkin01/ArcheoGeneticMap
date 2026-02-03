@@ -4,7 +4,7 @@
 Statistical analysis functions for sample attributes (dates, haplogroups, etc.).
 """
 
-export calculate_date_range, calculate_date_statistics
+export calculate_date_range, calculate_date_statistics, calculate_culture_statistics
 
 """
     calculate_date_range(geojson::Dict) -> Tuple{Float64, Float64}
@@ -77,7 +77,7 @@ end
 Identify unique culture names from a GeoJSON FeatureCollection.
 Returns a sorted vector of unique culture names, excluding missing or empty values.
 """
-function identify_unique_cultures(geojson::Dict)
+function calculate_culture_statistics(geojson::Dict)
     culture_set = Set{String}()
     for feature in geojson["features"]
         culture = get(feature["properties"], "culture", nothing)
