@@ -50,18 +50,18 @@
                             </div>
                             
                             <!-- Double range slider with piecewise scaling -->
-                            <!-- Cal BP: left = youngest (small BP), right = oldest (large BP) -->
+                            <!-- Cal BP: right = youngest (small BP), leftt = oldest (large BP) -->
                             <div class="slider-track">
                                 <div class="slider-range" 
                                      :style="sliderRangeStyle()"></div>
-                                <!-- Younger bound slider (left side, small BP values) -->
+                                <!-- Younger bound slider (right side, small BP values) -->
                                 <input type="range" 
                                        class="slider-input"
                                        min="0" 
                                        max="1000"
                                        x-model.number="sliderPositions.min"
                                        @input="onSliderInput('min')">
-                                <!-- Older bound slider (right side, large BP values) -->
+                                <!-- Older bound slider (left side, large BP values) -->
                                 <input type="range" 
                                        class="slider-input"
                                        min="0" 
@@ -113,14 +113,79 @@
                     </div>
                 </div>
                 
-                <!-- Culture Filter (placeholder) -->
+                <!-- Culture Filter -->
                 <div class="filter-section">
                     <div class="filter-header" @click="sections.culture = !sections.culture">
                         <span>Culture</span>
                         <span class="chevron" :class="{ 'collapsed': !sections.culture }">▼</span>
                     </div>
                     <div class="filter-body" x-show="sections.culture">
-                        <p class="placeholder-text">Coming soon</p>
+                        <div class="culture-container">
+                            <!-- Multi-select dropdown -->
+                            <label class="filter-label">Select Cultures</label>
+                            <div class="multi-select-wrapper">
+                                <div class="multi-select-toggle" @click="cultureDropdownOpen = !cultureDropdownOpen">
+                                    <span x-text="selectedCulturesSummary()"></span>
+                                    <span class="chevron" :class="{ 'collapsed': !cultureDropdownOpen }">▼</span>
+                                </div>
+                                <div class="multi-select-dropdown" x-show="cultureDropdownOpen" @click.away="cultureDropdownOpen = false">
+                                    <!-- Select All option -->
+                                    <label class="multi-select-option select-all">
+                                        <input type="checkbox" 
+                                            :checked="allCulturesSelected"
+                                            @change="toggleAllCultures()">
+                                        <span>All</span>
+                                    </label>
+                                    <div class="multi-select-divider"></div>
+                                    <!-- Individual culture options -->
+                                    <template x-for="culture in availableCultures" :key="culture">
+                                        <label class="multi-select-option">
+                                            <input type="checkbox" 
+                                                :value="culture"
+                                                :checked="selectedCultures.includes(culture)"
+                                                @change="toggleCulture(culture)">
+                                            <span x-text="culture"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <div class="checkbox-row">
+                                <input type="checkbox" 
+                                    id="includeNoCulture" 
+                                    x-model="filters.includeNoCulture"
+                                    @change="applyFilters()">
+                                <label for="includeNoCulture">Include samples with no culture</label>
+                            </div>
+                            
+                            <!-- Color by Culture Controls -->
+                            <div class="color-ramp-controls">
+                                <div class="checkbox-row">
+                                    <input type="checkbox" 
+                                        id="colorByCultureEnabled" 
+                                        x-model="colorByCultureEnabled"
+                                        @change="onColorByCultureChange()">
+                                    <label for="colorByCultureEnabled">Color by culture</label>
+                                </div>
+                                
+                                <div class="color-ramp-options" x-show="colorByCultureEnabled" x-transition>
+                                    <!-- Culture color legend -->
+                                    <div class="culture-legend">
+                                        <template x-for="culture in selectedCulturesForLegend()" :key="culture">
+                                            <div class="culture-legend-item">
+                                                <span class="culture-color-swatch" 
+                                                    :style="{ backgroundColor: getCultureColor(culture) }"></span>
+                                                <span class="culture-legend-label" x-text="culture"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="stats">
+                                <span x-text="selectedCultures.length"></span> of <span x-text="availableCultures.length"></span> cultures selected
+                            </div>
+                        </div>
                     </div>
                 </div>
                 

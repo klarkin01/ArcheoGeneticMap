@@ -58,12 +58,20 @@ function initMap() {
  * @param {string} defaultColor - Default color when ramp is disabled
  * @returns {string} Hex color string
  */
-function getFeatureColor(age, colorSettings, defaultColor) {
-    if (!colorSettings.colorRampEnabled) {
+function getFeatureColor(feature, colorSettings, defaultColor) {
+    const age = feature.properties.average_age_calbp;
+    const culture = feature.properties.culture;
+    
+    // Culture coloring takes precedence if enabled
+    if (colorSettings.colorByCultureEnabled) {
+        if (culture) {
+            return colorSettings.getCultureColor(culture);
+        }
         return defaultColor;
     }
     
-    if (age === null || age === undefined) {
+    // Age-based coloring
+    if (!colorSettings.colorRampEnabled) {
         return defaultColor;
     }
     
@@ -109,9 +117,8 @@ function updateMapLayer(features, colorSettings = null) {
     
     dataLayer = L.geoJSON(geojson, {
         pointToLayer: function(feature, latlng) {
-            const age = feature.properties.average_age_calbp;
             const color = colorSettings 
-                ? getFeatureColor(age, colorSettings, defaultColor)
+                ? getFeatureColor(feature, colorSettings, defaultColor)
                 : defaultColor;
             
             return L.circleMarker(latlng, {
@@ -144,8 +151,9 @@ function filterController() {
         // UI State
         // ---------------------------------------------------------------------
         sidebarOpen: true,
+        cultureDropdownOpen: false,
         sections: {
-            dateRange: true,
+            dateRange: false,
             culture: false,
             yHaplogroup: false,
             mtdna: false
@@ -171,6 +179,9 @@ function filterController() {
         
         // Piecewise scale instance (created on init with server-provided values)
         dateScale: null,
+
+        // Culture data (from server)
+        availableCultures: window.ArcheoGeneticMap.config.cultureStats?.cultureNames || [],
         
         // ---------------------------------------------------------------------
         // Filter State
@@ -179,14 +190,16 @@ function filterController() {
             // Actual date values for filtering (cal BP: larger = older)
             dateMin: config.dateRange.min,  // younger bound (smaller BP value)
             dateMax: config.dateRange.max,  // older bound (larger BP value)
-            includeUndated: Config.defaults.includeUndated
+            includeUndated: Config.defaults.includeUndated,
+            includeNoCulture: Config.defaults.includeNoCulture
         },
         
+        selectedCultures: [],
+
         // Slider positions (0-1000 scale)
-        // With cal BP: left side (0) = youngest/smallest, right side (1000) = oldest/largest
         sliderPositions: {
-            min: PiecewiseScale.SLIDER_MIN,  // left side = younger (small BP values)
-            max: PiecewiseScale.SLIDER_MAX   // right side = older (large BP values)
+            min: PiecewiseScale.SLIDER_MIN,  // right side = younger (small BP values)
+            max: PiecewiseScale.SLIDER_MAX   // left side = older (large BP values)
         },
         
         // ---------------------------------------------------------------------
@@ -195,6 +208,7 @@ function filterController() {
         colorRampEnabled: Config.defaults.colorRampEnabled,
         selectedColorRamp: Config.defaults.colorRamp,
         availableColorRamps: ColorRamps.options(),
+        colorByCultureEnabled: false,
         
         // ---------------------------------------------------------------------
         // Computed Properties
@@ -215,8 +229,15 @@ function filterController() {
                 colorRampEnabled: this.colorRampEnabled,
                 selectedColorRamp: this.selectedColorRamp,
                 dateMin: this.filters.dateMin,
-                dateMax: this.filters.dateMax
+                dateMax: this.filters.dateMax,
+                // Culture coloring
+                colorByCultureEnabled: this.colorByCultureEnabled,
+                availableCultures: this.availableCultures,
+                getCultureColor: (culture) => this.getCultureColor(culture)
             };
+        },
+        get allCulturesSelected() {
+            return this.selectedCultures.length === this.availableCultures.length;
         },
         
         // ---------------------------------------------------------------------
@@ -255,6 +276,9 @@ function filterController() {
                 this.allFeatures = data.features;
                 console.log('Loaded ' + this.allFeatures.length + ' features');
                 
+                // Initialize with all cultures selected
+                this.selectedCultures = [...this.availableCultures];
+
                 // Apply initial filters
                 this.applyFilters();
                 console.log('Alpine init() complete');
@@ -351,7 +375,102 @@ function filterController() {
         colorRampGradient() {
             return ColorRamps.gradient(this.selectedColorRamp);
         },
-        
+
+        // ---------------------------------------------------------------------
+        // Culture Filter Methods
+        // ---------------------------------------------------------------------
+
+        /**
+         * Get summary text for the multi-select toggle button
+         */
+        selectedCulturesSummary() {
+            if (this.selectedCultures.length === 0) {
+                return 'None selected';
+            }
+            if (this.selectedCultures.length === this.availableCultures.length) {
+                return 'All cultures';
+            }
+            if (this.selectedCultures.length === 1) {
+                return this.selectedCultures[0];
+            }
+            return this.selectedCultures.length + ' cultures selected';
+        },
+
+        /**
+         * Toggle a single culture selection
+         */
+        toggleCulture(culture) {
+            const index = this.selectedCultures.indexOf(culture);
+            if (index === -1) {
+                this.selectedCultures.push(culture);
+            } else {
+                this.selectedCultures.splice(index, 1);
+            }
+            this.applyFilters();
+        },
+
+        /**
+         * Toggle all cultures on/off
+         */
+        toggleAllCultures() {
+            if (this.allCulturesSelected) {
+                this.selectedCultures = [];
+            } else {
+                this.selectedCultures = [...this.availableCultures];
+            }
+            this.applyFilters();
+        },
+
+        /**
+         * Check if a feature passes the culture filter
+         */
+        passesCultureFilter(feature) {
+            const culture = feature.properties.culture;
+            
+            // Handle samples with no culture
+            if (culture === null || culture === undefined || culture === '') {
+                return this.filters.includeNoCulture;
+            }
+            
+            // Check if culture is in selected list
+            return this.selectedCultures.includes(culture);
+        },
+
+        /**
+         * Get cultures to show in legend (limits to selected cultures)
+         */
+        selectedCulturesForLegend() {
+            // Show selected cultures, or all if none selected
+            return this.selectedCultures.length > 0 
+                ? this.selectedCultures.slice(0, 20)  // Limit legend items
+                : this.availableCultures.slice(0, 20);
+        },
+
+        /**
+         * Get color for a culture (categorical coloring)
+         */
+        getCultureColor(culture) {
+            // Uses a categorical palette - you'll want to add this to config.js
+            const palette = Config.culturePalette || [
+                '#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00',
+                '#ffff33', '#a65628', '#f781bf', '#999999', '#66c2a5',
+                '#fc8d62', '#8da0cb', '#e78ac3', '#a6d854', '#ffd92f'
+            ];
+            const index = this.availableCultures.indexOf(culture);
+            return palette[index % palette.length];
+        },
+
+        /**
+         * Handle color by culture toggle
+         */
+        onColorByCultureChange() {
+            // Disable color by age if enabling color by culture
+            if (this.colorByCultureEnabled) {
+                this.colorRampEnabled = false;
+            }
+            updateMapLayer(this.filteredFeatures, this.colorSettings);
+        },
+
         // ---------------------------------------------------------------------
         // Filter Logic
         // ---------------------------------------------------------------------
@@ -361,9 +480,9 @@ function filterController() {
          */
         applyFilters() {
             this.filteredFeatures = this.allFeatures.filter(feature => {
-                return this.passesDateFilter(feature);
+                return this.passesDateFilter(feature) 
+                    && this.passesCultureFilter(feature);
                 // Future filters will be added here:
-                // && this.passesCultureFilter(feature)
                 // && this.passesYHaplogroupFilter(feature)
                 // && this.passesMtdnaFilter(feature)
             });

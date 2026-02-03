@@ -65,6 +65,9 @@ function build_config_json(config)
             "p2" => config.date_stats.p2,
             "p98" => config.date_stats.p98
         ),
+        "cultureStats" => Dict(
+            "cultureNames" => config.culture_stats.culture_names
+        ),
         "style" => Dict(
             "pointColor" => config.settings.point_color,
             "pointRadius" => config.settings.point_radius,

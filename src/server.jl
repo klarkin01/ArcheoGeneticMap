@@ -81,6 +81,7 @@ function serve_map_response(settings::MapSettings)
     bounds = calculate_bounds(geojson, settings.padding)
     center_lat, center_lon = calculate_center(bounds)
     date_stats = calculate_date_statistics(geojson)
+    culture_stats = calculate_culture_statistics(geojson)
     
     # Build configuration
     config = MapConfig(
@@ -88,6 +89,7 @@ function serve_map_response(settings::MapSettings)
         center_lon,
         settings.initial_zoom,
         date_stats,
+        culture_stats,
         settings
     )
     
