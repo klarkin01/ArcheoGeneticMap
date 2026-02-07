@@ -5,12 +5,17 @@ Web server routes and startup using Genie.
 """
 
 using Genie, Genie.Router, Genie.Renderer.Html, Genie.Renderer.Json
+using Genie.Requests: jsonpayload
+using Genie.Responses
 
 export setup_routes, start_server, serve_map, configure_data_source
 
 # Global reference to the data file path
 # Set via serve_map() or configure_data_source()
 const DATA_SOURCE = Ref{String}("")
+
+# Cache for loaded GeoJSON data (avoids re-reading file on every request)
+const GEOJSON_CACHE = Ref{Union{Dict{String, Any}, Nothing}}(nothing)
 
 """
     configure_data_source(filepath::String)
@@ -19,6 +24,7 @@ Set the GeoPackage file to serve.
 """
 function configure_data_source(filepath::String)
     DATA_SOURCE[] = filepath
+    GEOJSON_CACHE[] = nothing  # Clear cache when data source changes
 end
 
 """
@@ -32,6 +38,167 @@ function get_data_source()
     end
     return DATA_SOURCE[]
 end
+
+"""
+    get_cached_geojson() -> Dict
+
+Get the GeoJSON data, loading from file if not cached.
+"""
+function get_cached_geojson()
+    if GEOJSON_CACHE[] === nothing
+        filepath = get_data_source()
+        GEOJSON_CACHE[] = read_geopackage(filepath)
+    end
+    return GEOJSON_CACHE[]
+end
+
+"""
+    clear_geojson_cache()
+
+Clear the cached GeoJSON data. Useful for development.
+"""
+function clear_geojson_cache()
+    GEOJSON_CACHE[] = nothing
+end
+
+# =============================================================================
+# Request Parsing
+# =============================================================================
+
+"""
+    parse_filter_request(payload::Dict) -> FilterRequest
+
+Parse a JSON payload into a FilterRequest struct.
+"""
+function parse_filter_request(payload::Dict)
+    # Parse date bounds
+    date_min = get(payload, "dateMin", nothing)
+    date_max = get(payload, "dateMax", nothing)
+    
+    # Convert to Float64 if present
+    date_min = date_min === nothing ? nothing : Float64(date_min)
+    date_max = date_max === nothing ? nothing : Float64(date_max)
+    
+    # Normalize date range if inverted
+    if date_min !== nothing && date_max !== nothing && date_min > date_max
+        date_min, date_max = date_max, date_min
+    end
+    
+    # Parse include flags
+    include_undated = get(payload, "includeUndated", true)
+    include_no_culture = get(payload, "includeNoCulture", true)
+    
+    # Parse culture filter - now just an array of selected cultures
+    selected_cultures_raw = get(payload, "selectedCultures", [])
+    selected_cultures = String[string(s) for s in selected_cultures_raw]
+    culture_filter = CultureFilter(selected_cultures)
+    
+    # Parse color settings
+    color_by_str = get(payload, "colorBy", nothing)
+    color_by = if color_by_str === nothing || color_by_str == ""
+        nothing
+    else
+        Symbol(color_by_str)
+    end
+    
+    color_ramp = get(payload, "colorRamp", "viridis")
+    
+    return FilterRequest(
+        date_min = date_min,
+        date_max = date_max,
+        include_undated = include_undated,
+        culture_filter = culture_filter,
+        include_no_culture = include_no_culture,
+        color_by = color_by,
+        color_ramp = color_ramp
+    )
+end
+
+"""
+    query_response_to_dict(response::QueryResponse) -> Dict
+
+Convert a QueryResponse to a Dict for JSON serialization.
+"""
+function query_response_to_dict(response::QueryResponse)
+    return Dict(
+        "features" => response.features,
+        "meta" => Dict(
+            "totalCount" => response.meta.total_count,
+            "filteredCount" => response.meta.filtered_count,
+            "availableCultures" => response.meta.available_cultures,
+            "availableDateRange" => Dict(
+                "min" => response.meta.available_date_range[1],
+                "max" => response.meta.available_date_range[2]
+            ),
+            "dateStatistics" => Dict(
+                "min" => response.meta.date_statistics.min,
+                "max" => response.meta.date_statistics.max,
+                "p2" => response.meta.date_statistics.p2,
+                "p98" => response.meta.date_statistics.p98
+            ),
+            "cultureLegend" => [
+                Dict("name" => name, "color" => color)
+                for (name, color) in response.meta.culture_legend
+            ]
+        )
+    )
+end
+
+# =============================================================================
+# Configuration Endpoint
+# =============================================================================
+
+"""
+    build_config_response() -> Dict
+
+Build the configuration response for GET /api/config.
+"""
+function build_config_response()
+    geojson = get_cached_geojson()
+    
+    # Compute initial statistics from full dataset
+    date_stats = calculate_date_statistics(geojson)
+    culture_stats = calculate_culture_statistics(geojson)
+    bounds = calculate_bounds(geojson, DEFAULT_PADDING)
+    center_lat, center_lon = calculate_center(bounds)
+    
+    return Dict(
+        "colorRamps" => get_color_ramp_info(),
+        "culturePalette" => CULTURE_PALETTE,
+        "slider" => Dict(
+            "min" => 0,
+            "max" => 1000,
+            "segments" => Dict(
+                "leftBreak" => 50,
+                "rightBreak" => 950
+            )
+        ),
+        "defaults" => Dict(
+            "includeUndated" => true,
+            "includeNoCulture" => true,
+            "colorRamp" => "viridis",
+            "pointColor" => DEFAULT_POINT_COLOR,
+            "pointRadius" => DEFAULT_POINT_RADIUS
+        ),
+        "map" => Dict(
+            "center" => [center_lat, center_lon],
+            "zoom" => DEFAULT_ZOOM,
+            "tileUrl" => DEFAULT_TILE_URL,
+            "tileAttribution" => DEFAULT_TILE_ATTRIBUTION
+        ),
+        "dateStatistics" => Dict(
+            "min" => date_stats.min,
+            "max" => date_stats.max,
+            "p2" => date_stats.p2,
+            "p98" => date_stats.p98
+        ),
+        "allCultures" => culture_stats.culture_names
+    )
+end
+
+# =============================================================================
+# Route Setup
+# =============================================================================
 
 """
     setup_routes(; settings::MapSettings = MapSettings())
@@ -54,17 +221,72 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
     route("/humanitarian") do
         serve_map_response(MapSettings(:humanitarian))
     end
+
+    # TODO: Fix this
+    #Setting up favicon
+    route("/favicon.ico", method = GET) do
+        setheaders(Dict("Content-Type" => "image/svg+xml"))
+        """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+            <rect x="14" y="20" width="4" height="10" fill="#654321"/>
+            <circle cx="16" cy="12" r="8" fill="#2d5016"/>
+            <circle cx="11" cy="14" r="6" fill="#2d5016"/>
+            <circle cx="21" cy="14" r="6" fill="#2d5016"/>
+            <circle cx="13" cy="18" r="5" fill="#2d5016"/>
+            <circle cx="19" cy="18" r="5" fill="#2d5016"/>
+            <circle cx="16" cy="11" r="6" fill="#3d6d1f"/>
+            <circle cx="12" cy="13" r="4" fill="#3d6d1f"/>
+            <circle cx="20" cy="13" r="4" fill="#3d6d1f"/>
+        </svg>"""
+    end
     
-    # GeoJSON API endpoint
+    # -------------------------------------------------------------------------
+    # New API Endpoints
+    # -------------------------------------------------------------------------
+    
+    # Configuration endpoint - provides all config for frontend
+    route("/api/config") do
+        json(build_config_response())
+    end
+    
+    # Query endpoint - main filter/query API
+    route("/api/query", method = POST) do
+        try
+            payload = jsonpayload()
+            if payload === nothing
+                payload = Dict()
+            end
+            
+            request = parse_filter_request(payload)
+            geojson = get_cached_geojson()
+            response = process_query(geojson, request)
+            
+            return json(query_response_to_dict(response))
+        catch e
+            @error "Error processing query" exception=(e, catch_backtrace())
+            return json(Dict(
+                "error" => true,
+                "message" => string(e)
+            ))
+        end
+    end
+    
+    # -------------------------------------------------------------------------
+    # Legacy Endpoints (for backward compatibility during migration)
+    # -------------------------------------------------------------------------
+    
+    # GeoJSON API endpoint (legacy - will be removed after migration)
     route("/api/samples") do
-        filepath = get_data_source()
-        geojson = read_geopackage(filepath)
+        geojson = get_cached_geojson()
         json(geojson)
     end
     
     # Health check endpoint
     route("/health") do
-        json(Dict("status" => "ok", "data_source" => get_data_source()))
+        json(Dict(
+            "status" => "ok", 
+            "data_source" => get_data_source(),
+            "cached" => GEOJSON_CACHE[] !== nothing
+        ))
     end
 end
 
@@ -74,10 +296,9 @@ end
 Generate and serve the map HTML for a given settings configuration.
 """
 function serve_map_response(settings::MapSettings)
-    filepath = get_data_source()
+    geojson = get_cached_geojson()
     
-    # Load and analyze data
-    geojson = read_geopackage(filepath)
+    # Calculate bounds and center
     bounds = calculate_bounds(geojson, settings.padding)
     center_lat, center_lon = calculate_center(bounds)
     date_stats = calculate_date_statistics(geojson)

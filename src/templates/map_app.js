@@ -4,17 +4,34 @@
  * Frontend application using Alpine.js for state management
  * and Leaflet for map rendering.
  * 
- * Dependencies (loaded before this file via templates.jl):
- *   - ColorRamps: Color ramp definitions and interpolation
+ * This is a "thin client" that delegates filtering and color assignment
+ * to the backend via /api/query. The frontend handles:
+ *   - UI state (sidebar, dropdowns, sections)
+ *   - Slider position tracking and conversion
+ *   - Map rendering with server-provided colors
+ *   - Debounced server requests
+ * 
+ * Dependencies (loaded before this file):
  *   - PiecewiseScale: Slider-to-value conversion with outlier compression
  *   - PopupBuilder: HTML popup generation for map markers
- * 
- * Expects window.ArcheoGeneticMap.config to be set with:
- *   - center: [lat, lon]
- *   - zoom: initial zoom level
- *   - dateRange: { min, max } in cal BP
- *   - style: { pointColor, pointRadius, tileUrl, tileAttribution }
  */
+
+// =============================================================================
+// Utilities
+// =============================================================================
+
+let mapInitialized = false;
+
+/**
+ * Simple debounce function
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
 
 // =============================================================================
 // Map Layer Management (Leaflet)
@@ -24,26 +41,30 @@ let map = null;
 let dataLayer = null;
 
 /**
- * Initialize the Leaflet map with configuration from ArcheoGeneticMap.config
+ * Initialize the Leaflet map
  */
-function initMap() {
-    const config = window.ArcheoGeneticMap.config;
+function initMap(config) {
+    
+    if (mapInitialized) {
+        console.log('Map already initialized, skipping...');
+        return;
+    }
     
     console.log('Initializing map...', config);
     
     try {
-        map = L.map('map').setView(config.center, config.zoom);
+        map = L.map('map').setView(config.map.center, config.map.zoom);
         
-        L.tileLayer(config.style.tileUrl, {
-            attribution: config.style.tileAttribution
+        L.tileLayer(config.map.tileUrl, {
+            attribution: config.map.tileAttribution
         }).addTo(map);
         
+        mapInitialized = true;
         console.log('Map initialized successfully');
         
         // Force a resize after a short delay to handle any layout issues
         setTimeout(() => {
             map.invalidateSize();
-            console.log('Map size invalidated');
         }, 100);
         
     } catch (e) {
@@ -52,64 +73,16 @@ function initMap() {
 }
 
 /**
- * Get color for a feature based on its age and current filter settings
- * @param {number|null} age - Age value in cal BP (larger = older, smaller = younger)
- * @param {Object} colorSettings - Object with colorRampEnabled, selectedColorRamp, dateMin, dateMax
- * @param {string} defaultColor - Default color when ramp is disabled
- * @returns {string} Hex color string
+ * Update the map layer with features from server
+ * Colors are already assigned by the server in feature.properties._color
  */
-function getFeatureColor(feature, colorSettings, defaultColor) {
-    const age = feature.properties.average_age_calbp;
-    const culture = feature.properties.culture;
-    
-    // Culture coloring takes precedence if enabled
-    if (colorSettings.colorByCultureEnabled) {
-        if (culture) {
-            return colorSettings.getCultureColor(culture);
-        }
-        return defaultColor;
-    }
-    
-    // Age-based coloring
-    if (!colorSettings.colorRampEnabled) {
-        return defaultColor;
-    }
-    
-    // Data convention: cal BP (Before Present)
-    // Larger numbers = OLDER (more ancient), smaller numbers = YOUNGER (more recent)
-    // dateMin = smaller number = younger bound
-    // dateMax = larger number = older bound
-    
-    const youngerBound = colorSettings.dateMin;  // smaller numeric value = more recent
-    const olderBound = colorSettings.dateMax;    // larger numeric value = older
-    const range = olderBound - youngerBound;
-    
-    if (range === 0) {
-        return ColorRamps.interpolate(colorSettings.selectedColorRamp, 0.5);
-    }
-    
-    // Normalize: t=0 for oldest samples (large BP), t=1 for youngest samples (small BP)
-    const t = (olderBound - age) / range;
-    
-    return ColorRamps.interpolate(colorSettings.selectedColorRamp, t);
-}
-
-/**
- * Update the map layer with filtered features
- * @param {Array} features - GeoJSON features to display
- * @param {Object} colorSettings - Color ramp settings
- */
-function updateMapLayer(features, colorSettings = null) {
-    const config = window.ArcheoGeneticMap.config;
-    const defaultColor = config.style.pointColor;
-    const pointRadius = config.style.pointRadius;
-    
+function updateMapLayer(features, defaultColor, pointRadius) {
     // Remove existing layer
     if (dataLayer) {
         map.removeLayer(dataLayer);
     }
     
-    // Create new layer with filtered data
+    // Create new layer
     const geojson = {
         type: 'FeatureCollection',
         features: features
@@ -117,9 +90,8 @@ function updateMapLayer(features, colorSettings = null) {
     
     dataLayer = L.geoJSON(geojson, {
         pointToLayer: function(feature, latlng) {
-            const color = colorSettings 
-                ? getFeatureColor(feature, colorSettings, defaultColor)
-                : defaultColor;
+            // Use server-assigned color, fall back to default
+            const color = feature.properties._color || defaultColor;
             
             return L.circleMarker(latlng, {
                 radius: pointRadius,
@@ -141,17 +113,16 @@ function updateMapLayer(features, colorSettings = null) {
 // =============================================================================
 
 /**
- * Alpine.js component for filter management and data state
+ * Alpine.js component for filter management
  */
 function filterController() {
-    const config = window.ArcheoGeneticMap.config;
-    
     return {
         // ---------------------------------------------------------------------
         // UI State
         // ---------------------------------------------------------------------
         sidebarOpen: true,
         cultureDropdownOpen: false,
+        loading: false,
         sections: {
             dateRange: false,
             culture: false,
@@ -160,84 +131,73 @@ function filterController() {
         },
         
         // ---------------------------------------------------------------------
-        // Data State
+        // Server-provided Configuration
         // ---------------------------------------------------------------------
-        allFeatures: [],
-        filteredFeatures: [],
-        
-        // Full data range and percentiles (from server)
-        dataRange: {
-            min: config.dateRange.min,
-            max: config.dateRange.max
-        },
-        
-        // Percentile bounds for piecewise scaling (from server)
-        percentiles: {
-            p2: config.dateRange.p2,
-            p98: config.dateRange.p98
-        },
-        
-        // Piecewise scale instance (created on init with server-provided values)
-        dateScale: null,
-
-        // Culture data (from server)
-        availableCultures: window.ArcheoGeneticMap.config.cultureStats?.cultureNames || [],
+        config: null,
         
         // ---------------------------------------------------------------------
-        // Filter State
+        // Server-provided Metadata (updated with each query)
+        // ---------------------------------------------------------------------
+        meta: {
+            totalCount: 0,
+            filteredCount: 0,
+            availableCultures: [],
+            availableDateRange: { min: 0, max: 50000 },
+            dateStatistics: { min: 0, max: 50000, p2: 0, p98: 50000 },
+            cultureLegend: []
+        },
+        
+        // ---------------------------------------------------------------------
+        // Filter State (sent to server)
         // ---------------------------------------------------------------------
         filters: {
-            // Actual date values for filtering (cal BP: larger = older)
-            dateMin: config.dateRange.min,  // younger bound (smaller BP value)
-            dateMax: config.dateRange.max,  // older bound (larger BP value)
-            includeUndated: Config.defaults.includeUndated,
-            includeNoCulture: Config.defaults.includeNoCulture
+            dateMin: null,
+            dateMax: null,
+            includeUndated: true,
+            includeNoCulture: true
         },
         
+        // Culture filter state - just track selected cultures
         selectedCultures: [],
-
-        // Slider positions (0-1000 scale)
-        sliderPositions: {
-            min: PiecewiseScale.SLIDER_MIN,  // right side = younger (small BP values)
-            max: PiecewiseScale.SLIDER_MAX   // left side = older (large BP values)
-        },
         
-        // ---------------------------------------------------------------------
-        // Color Ramp State
-        // ---------------------------------------------------------------------
-        colorRampEnabled: Config.defaults.colorRampEnabled,
-        selectedColorRamp: Config.defaults.colorRamp,
-        availableColorRamps: ColorRamps.options(),
-        colorByCultureEnabled: false,
+        // Color settings
+        colorBy: null,  // null, 'age', 'culture'
+        colorRamp: 'viridis',
+        
+        // Slider positions (0-1000 scale, UI concern only)
+        sliderPositions: { min: 0, max: 1000 },
+        
+        // Piecewise scale instance
+        dateScale: null,
+        
+        // Current features (from server)
+        features: [],
         
         // ---------------------------------------------------------------------
         // Computed Properties
         // ---------------------------------------------------------------------
         get totalCount() {
-            return this.allFeatures.length;
+            return this.meta.totalCount;
         },
         
         get filteredCount() {
-            return this.filteredFeatures.length;
+            return this.meta.filteredCount;
         },
         
-        /**
-         * Get current color settings for map rendering
-         */
-        get colorSettings() {
-            return {
-                colorRampEnabled: this.colorRampEnabled,
-                selectedColorRamp: this.selectedColorRamp,
-                dateMin: this.filters.dateMin,
-                dateMax: this.filters.dateMax,
-                // Culture coloring
-                colorByCultureEnabled: this.colorByCultureEnabled,
-                availableCultures: this.availableCultures,
-                getCultureColor: (culture) => this.getCultureColor(culture)
-            };
+        get availableCultures() {
+            return this.meta.availableCultures;
         },
+        
         get allCulturesSelected() {
             return this.selectedCultures.length === this.availableCultures.length;
+        },
+        
+        get availableColorRamps() {
+            if (!this.config) return [];
+            return Object.entries(this.config.colorRamps).map(([value, ramp]) => ({
+                value,
+                label: ramp.label
+            }));
         },
         
         // ---------------------------------------------------------------------
@@ -247,40 +207,43 @@ function filterController() {
             console.log('Alpine init() starting...');
             
             try {
-                // Initialize the Leaflet map
-                initMap();
+                // Fetch configuration from server
+                console.log('Fetching config from /api/config...');
+                const configResponse = await fetch('/api/config');
+                this.config = await configResponse.json();
+                console.log('Config loaded:', this.config);
                 
-                // Create the piecewise scale using server-provided statistics
+                // Initialize the Leaflet map
+                initMap(this.config);
+                
+                // Set up date scale from server-provided statistics
+                const stats = this.config.dateStatistics;
                 this.dateScale = PiecewiseScale.create(
-                    this.dataRange.min,
-                    this.dataRange.max,
-                    this.percentiles.p2,
-                    this.percentiles.p98
+                    stats.min,
+                    stats.max,
+                    stats.p2,
+                    stats.p98
                 );
                 
                 // Set initial filter range (p2 to p98 for better default view)
-                this.filters.dateMin = this.percentiles.p2;
-                this.filters.dateMax = this.percentiles.p98;
+                this.filters.dateMin = stats.p2;
+                this.filters.dateMax = stats.p98;
                 
-                // Set initial slider positions to match
-                this.sliderPositions.min = this.dateScale.toSlider(this.filters.dateMin);
-                this.sliderPositions.max = this.dateScale.toSlider(this.filters.dateMax);
+                // Set initial slider positions
+                this.sliderPositions.min = 1000 - this.dateScale.toSlider(this.filters.dateMax);
+                this.sliderPositions.max = 1000 - this.dateScale.toSlider(this.filters.dateMin);
                 
-                console.log('Date range:', this.dataRange);
-                console.log('Percentiles:', this.percentiles);
+                // Initialize culture selection to all
+                this.selectedCultures = [...this.config.allCultures];
                 
-                // Fetch sample data from API
-                console.log('Fetching data from /api/samples...');
-                const response = await fetch('/api/samples');
-                const data = await response.json();
-                this.allFeatures = data.features;
-                console.log('Loaded ' + this.allFeatures.length + ' features');
+                // Set defaults
+                this.filters.includeUndated = this.config.defaults.includeUndated;
+                this.filters.includeNoCulture = this.config.defaults.includeNoCulture;
+                this.colorRamp = this.config.defaults.colorRamp;
                 
-                // Initialize with all cultures selected
-                this.selectedCultures = [...this.availableCultures];
-
-                // Apply initial filters
-                this.applyFilters();
+                // Fetch initial data
+                await this.applyFilters();
+                
                 console.log('Alpine init() complete');
                 
             } catch (e) {
@@ -289,77 +252,117 @@ function filterController() {
         },
         
         // ---------------------------------------------------------------------
+        // Server Communication
+        // ---------------------------------------------------------------------
+        
+        /**
+         * Build the request payload for /api/query
+         */
+        buildQueryPayload() {
+            return {
+                dateMin: this.filters.dateMin,
+                dateMax: this.filters.dateMax,
+                includeUndated: this.filters.includeUndated,
+                selectedCultures: this.selectedCultures,
+                includeNoCulture: this.filters.includeNoCulture,
+                colorBy: this.colorBy,
+                colorRamp: this.colorRamp
+            };
+        },
+        
+        /**
+         * Send query to server and update state
+         */
+        async applyFilters() {
+            if (!this.config) return;
+            
+            this.loading = true;
+            
+            try {
+                const payload = this.buildQueryPayload();
+                console.log('Sending query:', payload);
+                
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Query error:', data.message);
+                    return;
+                }
+                
+                // Update state from response
+                this.features = data.features;
+                this.meta = data.meta;
+                
+                // Update map
+                updateMapLayer(
+                    this.features,
+                    this.config.defaults.pointColor,
+                    this.config.defaults.pointRadius
+                );
+                
+                console.log('Query complete:', this.meta.filteredCount, 'features');
+                
+            } catch (e) {
+                console.error('Error in applyFilters:', e);
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        /**
+         * Debounced version for slider input
+         */
+        applyFiltersDebounced: debounce(function() {
+            this.applyFilters();
+        }, 200),
+        
+        // ---------------------------------------------------------------------
         // Date Range Methods
         // ---------------------------------------------------------------------
         
         /**
          * Handle slider input changes
-         * Converts slider position to date value and updates filters
-         * Cal BP: slider left (0) = youngest, slider right (1000) = oldest
          */
         onSliderInput(which) {
             if (!this.dateScale) return;
             
             if (which === 'min') {
-                // "min" slider controls the younger/left bound (smaller BP values)
-                this.filters.dateMin = Math.round(this.dateScale.toValue(this.sliderPositions.min));
+                // Left slider controls the older (higher BP) values
+                this.filters.dateMax = Math.round(this.dateScale.toValue(1000-this.sliderPositions.min));
             } else {
-                // "max" slider controls the older/right bound (larger BP values)
-                this.filters.dateMax = Math.round(this.dateScale.toValue(this.sliderPositions.max));
+                // Right slider controls the younger (lower BP) values
+                this.filters.dateMin = Math.round(this.dateScale.toValue(1000-this.sliderPositions.max));
             }
             
-            // Ensure proper ordering: dateMin should be <= dateMax (younger <= older in BP)
-            if (this.filters.dateMin > this.filters.dateMax) {
-                const temp = this.filters.dateMin;
-                this.filters.dateMin = this.filters.dateMax;
-                this.filters.dateMax = temp;
-                // Also swap slider positions
-                const tempSlider = this.sliderPositions.min;
-                this.sliderPositions.min = this.sliderPositions.max;
-                this.sliderPositions.max = tempSlider;
-            }
-            
-            this.applyFilters();
+            // Use debounced version for slider dragging
+            this.applyFiltersDebounced();
         },
         
         /**
-         * Handle direct date input changes (from number inputs)
-         * Updates slider positions to match
-         * Cal BP: dateMin = younger (smaller), dateMax = older (larger)
+         * Handle direct date input changes
          */
         onDateChange() {
             if (!this.dateScale) return;
-            
-            // Ensure proper ordering: dateMin <= dateMax (younger <= older in BP)
-            if (this.filters.dateMin > this.filters.dateMax) {
-                const temp = this.filters.dateMin;
-                this.filters.dateMin = this.filters.dateMax;
-                this.filters.dateMax = temp;
-            }
             
             // Clamp to data range
             this.filters.dateMin = this.dateScale.clamp(this.filters.dateMin);
             this.filters.dateMax = this.dateScale.clamp(this.filters.dateMax);
             
             // Update slider positions
-            this.sliderPositions.min = this.dateScale.toSlider(this.filters.dateMin);
-            this.sliderPositions.max = this.dateScale.toSlider(this.filters.dateMax);
+            this.sliderPositions.min = 1000 - this.dateScale.toSlider(this.filters.dateMax);
+            this.sliderPositions.max = 1000 - this.dateScale.toSlider(this.filters.dateMin);
             
             this.applyFilters();
         },
         
         /**
-         * Handle color ramp toggle or selection change
-         */
-        onColorRampChange() {
-            // Re-render the map with current features and new color settings
-            updateMapLayer(this.filteredFeatures, this.colorSettings);
-        },
-        
-        /**
          * Calculate CSS style for the slider range highlight
-         * Uses slider positions directly (already in 0-1000 scale)
-         * Cal BP: sliderPositions.min = left/younger, sliderPositions.max = right/older
          */
         sliderRangeStyle() {
             if (!this.dateScale) {
@@ -368,14 +371,43 @@ function filterController() {
             return this.dateScale.rangeStyle(this.sliderPositions.min, this.sliderPositions.max);
         },
         
+        // ---------------------------------------------------------------------
+        // Color Methods
+        // ---------------------------------------------------------------------
+        
         /**
-         * Generate a preview gradient for the selected color ramp
-         * @returns {string} CSS linear-gradient string
+         * Handle color by age toggle
          */
-        colorRampGradient() {
-            return ColorRamps.gradient(this.selectedColorRamp);
+        onColorByAgeChange() {
+            if (this.colorBy === 'age') {
+                this.colorBy = null;
+            } else {
+                this.colorBy = 'age';
+            }
+            this.applyFilters();
         },
-
+        
+        /**
+         * Handle color ramp selection change
+         */
+        onColorRampChange() {
+            if (this.colorBy === 'age') {
+                this.applyFilters();
+            }
+        },
+        
+        /**
+         * Handle color by culture toggle
+         */
+        onColorByCultureChange() {
+            if (this.colorBy === 'culture') {
+                this.colorBy = null;
+            } else {
+                this.colorBy = 'culture';
+            }
+            this.applyFilters();
+        },
+        
         // ---------------------------------------------------------------------
         // Culture Filter Methods
         // ---------------------------------------------------------------------
@@ -384,16 +416,19 @@ function filterController() {
          * Get summary text for the multi-select toggle button
          */
         selectedCulturesSummary() {
-            if (this.selectedCultures.length === 0) {
+            const count = this.selectedCultures.length;
+            const total = this.availableCultures.length;
+            
+            if (count === 0) {
                 return 'None selected';
             }
-            if (this.selectedCultures.length === this.availableCultures.length) {
+            if (count === total) {
                 return 'All cultures';
             }
-            if (this.selectedCultures.length === 1) {
+            if (count === 1) {
                 return this.selectedCultures[0];
             }
-            return this.selectedCultures.length + ' cultures selected';
+            return count + ' cultures selected';
         },
 
         /**
@@ -402,8 +437,10 @@ function filterController() {
         toggleCulture(culture) {
             const index = this.selectedCultures.indexOf(culture);
             if (index === -1) {
+                // Add culture
                 this.selectedCultures.push(culture);
             } else {
+                // Remove culture
                 this.selectedCultures.splice(index, 1);
             }
             this.applyFilters();
@@ -414,105 +451,38 @@ function filterController() {
          */
         toggleAllCultures() {
             if (this.allCulturesSelected) {
+                // Deselect all
                 this.selectedCultures = [];
             } else {
+                // Select all
                 this.selectedCultures = [...this.availableCultures];
             }
             this.applyFilters();
         },
-
+        
         /**
-         * Check if a feature passes the culture filter
+         * Check if a culture is currently selected
          */
-        passesCultureFilter(feature) {
-            const culture = feature.properties.culture;
-            
-            // Handle samples with no culture
-            if (culture === null || culture === undefined || culture === '') {
-                return this.filters.includeNoCulture;
-            }
-            
-            // Check if culture is in selected list
+        isCultureSelected(culture) {
             return this.selectedCultures.includes(culture);
         },
 
         /**
-         * Get cultures to show in legend (limits to selected cultures)
+         * Get cultures to show in legend (from server-provided legend)
          */
-        selectedCulturesForLegend() {
-            // Show selected cultures, or all if none selected
-            return this.selectedCultures.length > 0 
-                ? this.selectedCultures.slice(0, 20)  // Limit legend items
-                : this.availableCultures.slice(0, 20);
-        },
-
-        /**
-         * Get color for a culture (categorical coloring)
-         */
-        getCultureColor(culture) {
-            // Uses a categorical palette - you'll want to add this to config.js
-            const palette = Config.culturePalette || [
-                '#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00',
-                '#ffff33', '#a65628', '#f781bf', '#999999', '#66c2a5',
-                '#fc8d62', '#8da0cb', '#e78ac3', '#a6d854', '#ffd92f'
-            ];
-            const index = this.availableCultures.indexOf(culture);
-            return palette[index % palette.length];
-        },
-
-        /**
-         * Handle color by culture toggle
-         */
-        onColorByCultureChange() {
-            // Disable color by age if enabling color by culture
-            if (this.colorByCultureEnabled) {
-                this.colorRampEnabled = false;
-            }
-            updateMapLayer(this.filteredFeatures, this.colorSettings);
-        },
-
-        // ---------------------------------------------------------------------
-        // Filter Logic
-        // ---------------------------------------------------------------------
-        
-        /**
-         * Apply all active filters and update the map
-         */
-        applyFilters() {
-            this.filteredFeatures = this.allFeatures.filter(feature => {
-                return this.passesDateFilter(feature) 
-                    && this.passesCultureFilter(feature);
-                // Future filters will be added here:
-                // && this.passesYHaplogroupFilter(feature)
-                // && this.passesMtdnaFilter(feature)
-            });
-            
-            // Update the map display with color settings
-            updateMapLayer(this.filteredFeatures, this.colorSettings);
+        cultureLegendItems() {
+            return this.meta.cultureLegend || [];
         },
         
         /**
-         * Check if a feature passes the date filter
-         * @param {Object} feature - GeoJSON feature
-         * @returns {boolean} True if feature passes the filter
-         * Cal BP: dateMin = younger/smaller value, dateMax = older/larger value
+         * Generate a preview gradient for the selected color ramp
          */
-        passesDateFilter(feature) {
-            const age = feature.properties.average_age_calbp;
-            
-            // Handle undated samples
-            if (age === null || age === undefined) {
-                return this.filters.includeUndated;
+        colorRampGradient() {
+            if (!this.config || !this.config.colorRamps[this.colorRamp]) {
+                return 'transparent';
             }
-            
-            // Check if within range
-            // dateMin is the younger/smaller BP value, dateMax is the older/larger BP value
-            return age >= this.filters.dateMin && age <= this.filters.dateMax;
+            const colors = this.config.colorRamps[this.colorRamp].colors;
+            return 'linear-gradient(to right, ' + colors.join(', ') + ')';
         }
-        
-        // Future filter methods will be added here:
-        // passesCultureFilter(feature) { ... }
-        // passesYHaplogroupFilter(feature) { ... }
-        // passesMtdnaFilter(feature) { ... }
     };
 }

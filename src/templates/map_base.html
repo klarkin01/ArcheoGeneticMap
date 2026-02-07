@@ -11,13 +11,13 @@
     </style>
 </head>
 <body>
-    <!-- Configuration injected by server -->
-    <script>
-        window.ArcheoGeneticMap = { config: {{CONFIG}} };
-    </script>
-    
     <!-- Sidebar with Alpine.js -->
     <div x-data="filterController()" x-init="init()" class="sidebar-wrapper">
+        <!-- Loading overlay -->
+        <div x-show="loading" class="loading-overlay">
+            <div class="loading-spinner"></div>
+        </div>
+        
         <!-- Sidebar -->
         <aside class="sidebar" :class="{ 'collapsed': !sidebarOpen }">
             <div class="sidebar-header">
@@ -29,7 +29,7 @@
                 <div class="filter-section">
                     <div class="filter-header" @click="sections.dateRange = !sections.dateRange">
                         <span>Date Range (cal BP)</span>
-                        <span class="chevron" :class="{ 'collapsed': !sections.dateRange }">▼</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.dateRange }">&#x25BC;</span>
                     </div>
                     <div class="filter-body" x-show="sections.dateRange">
                         <div class="range-container">
@@ -37,31 +37,24 @@
                                 <input type="number" 
                                        class="range-input" 
                                        x-model.number="filters.dateMax"
-                                       :max="dataRange.max"
-                                       :min="dataRange.min"
                                        @change="onDateChange()">
                                 <span class="range-separator">to</span>
                                 <input type="number" 
                                        class="range-input" 
                                        x-model.number="filters.dateMin"
-                                       :max="dataRange.max"
-                                       :min="dataRange.min"
                                        @change="onDateChange()">
                             </div>
                             
                             <!-- Double range slider with piecewise scaling -->
-                            <!-- Cal BP: right = youngest (small BP), leftt = oldest (large BP) -->
                             <div class="slider-track">
                                 <div class="slider-range" 
                                      :style="sliderRangeStyle()"></div>
-                                <!-- Younger bound slider (right side, small BP values) -->
                                 <input type="range" 
                                        class="slider-input"
                                        min="0" 
                                        max="1000"
                                        x-model.number="sliderPositions.min"
                                        @input="onSliderInput('min')">
-                                <!-- Older bound slider (left side, large BP values) -->
                                 <input type="range" 
                                        class="slider-input"
                                        min="0" 
@@ -78,19 +71,19 @@
                                 <label for="includeUndated">Include undated samples</label>
                             </div>
                             
-                            <!-- Color Ramp Controls -->
+                            <!-- Color by Age Controls -->
                             <div class="color-ramp-controls">
                                 <div class="checkbox-row">
                                     <input type="checkbox" 
-                                           id="colorRampEnabled" 
-                                           x-model="colorRampEnabled"
-                                           @change="onColorRampChange()">
-                                    <label for="colorRampEnabled">Color by age</label>
+                                           id="colorByAge" 
+                                           :checked="colorBy === 'age'"
+                                           @change="onColorByAgeChange()">
+                                    <label for="colorByAge">Color by age</label>
                                 </div>
                                 
-                                <div class="color-ramp-options" x-show="colorRampEnabled" x-transition>
+                                <div class="color-ramp-options" x-show="colorBy === 'age'" x-transition>
                                     <select class="color-ramp-select"
-                                            x-model="selectedColorRamp"
+                                            x-model="colorRamp"
                                             @change="onColorRampChange()">
                                         <template x-for="ramp in availableColorRamps" :key="ramp.value">
                                             <option :value="ramp.value" x-text="ramp.label"></option>
@@ -117,7 +110,7 @@
                 <div class="filter-section">
                     <div class="filter-header" @click="sections.culture = !sections.culture">
                         <span>Culture</span>
-                        <span class="chevron" :class="{ 'collapsed': !sections.culture }">▼</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.culture }">&#x25BC;</span>
                     </div>
                     <div class="filter-body" x-show="sections.culture">
                         <div class="culture-container">
@@ -126,7 +119,7 @@
                             <div class="multi-select-wrapper">
                                 <div class="multi-select-toggle" @click="cultureDropdownOpen = !cultureDropdownOpen">
                                     <span x-text="selectedCulturesSummary()"></span>
-                                    <span class="chevron" :class="{ 'collapsed': !cultureDropdownOpen }">▼</span>
+                                    <span class="chevron" :class="{ 'collapsed': !cultureDropdownOpen }">&#x25BC;</span>
                                 </div>
                                 <div class="multi-select-dropdown" x-show="cultureDropdownOpen" @click.away="cultureDropdownOpen = false">
                                     <!-- Select All option -->
@@ -142,7 +135,7 @@
                                         <label class="multi-select-option">
                                             <input type="checkbox" 
                                                 :value="culture"
-                                                :checked="selectedCultures.includes(culture)"
+                                                :checked="isCultureSelected(culture)"
                                                 @change="toggleCulture(culture)">
                                             <span x-text="culture"></span>
                                         </label>
@@ -162,20 +155,20 @@
                             <div class="color-ramp-controls">
                                 <div class="checkbox-row">
                                     <input type="checkbox" 
-                                        id="colorByCultureEnabled" 
-                                        x-model="colorByCultureEnabled"
+                                        id="colorByCulture" 
+                                        :checked="colorBy === 'culture'"
                                         @change="onColorByCultureChange()">
-                                    <label for="colorByCultureEnabled">Color by culture</label>
+                                    <label for="colorByCulture">Color by culture</label>
                                 </div>
                                 
-                                <div class="color-ramp-options" x-show="colorByCultureEnabled" x-transition>
+                                <div class="color-ramp-options" x-show="colorBy === 'culture'" x-transition>
                                     <!-- Culture color legend -->
                                     <div class="culture-legend">
-                                        <template x-for="culture in selectedCulturesForLegend()" :key="culture">
+                                        <template x-for="item in cultureLegendItems()" :key="item.name">
                                             <div class="culture-legend-item">
                                                 <span class="culture-color-swatch" 
-                                                    :style="{ backgroundColor: getCultureColor(culture) }"></span>
-                                                <span class="culture-legend-label" x-text="culture"></span>
+                                                    :style="{ backgroundColor: item.color }"></span>
+                                                <span class="culture-legend-label" x-text="item.name"></span>
                                             </div>
                                         </template>
                                     </div>
@@ -193,7 +186,7 @@
                 <div class="filter-section">
                     <div class="filter-header" @click="sections.yHaplogroup = !sections.yHaplogroup">
                         <span>Y Haplogroup</span>
-                        <span class="chevron" :class="{ 'collapsed': !sections.yHaplogroup }">▼</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.yHaplogroup }">&#x25BC;</span>
                     </div>
                     <div class="filter-body" x-show="sections.yHaplogroup">
                         <p class="placeholder-text">Coming soon</p>
@@ -204,7 +197,7 @@
                 <div class="filter-section">
                     <div class="filter-header" @click="sections.mtdna = !sections.mtdna">
                         <span>mtDNA</span>
-                        <span class="chevron" :class="{ 'collapsed': !sections.mtdna }">▼</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.mtdna }">&#x25BC;</span>
                     </div>
                     <div class="filter-body" x-show="sections.mtdna">
                         <p class="placeholder-text">Coming soon</p>
@@ -214,6 +207,7 @@
             
             <div class="sidebar-footer">
                 <strong x-text="filteredCount"></strong> samples displayed
+                <span x-show="loading" class="loading-text">Loading...</span>
             </div>
         </aside>
         
@@ -221,7 +215,7 @@
         <button class="sidebar-toggle" 
                 :class="{ 'collapsed': !sidebarOpen }"
                 @click="sidebarOpen = !sidebarOpen">
-            <span x-text="sidebarOpen ? '◀' : '▶'"></span>
+            <span x-text="sidebarOpen ? 'â—€' : 'â–¶'"></span>
         </button>
     </div>
     

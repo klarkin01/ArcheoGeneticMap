@@ -25,44 +25,81 @@ Then open http://localhost:8000 in your browser.
 
 - **Interactive Map**: Pan, zoom, and click on samples for details
 - **Date Filtering**: Filter samples by calibrated BP date range with piecewise slider scaling for better control over outliers
-- **Color by Age**: Optional color ramping to visualize temporal distribution (viridis, plasma, spectral, and more)
+- **Culture Filtering**: Filter by archaeological culture with multi-select dropdown
+- **Cascading Filters**: Available cultures update based on date range selection
+- **Color by Age**: Color ramp visualization of temporal distribution (viridis, plasma, spectral, and more)
+- **Color by Culture**: Categorical coloring by archaeological culture
 - **Multiple Tile Layers**: OpenStreetMap, OpenTopoMap, Humanitarian OSM
 - **Collapsible Sidebar**: Toggle the filter panel for more map space
 
-## URL Endpoints
+## Architecture
 
-| Path | Description |
-|------|-------------|
-| `/` | Main map with OpenStreetMap tiles |
-| `/topo` | OpenTopoMap tiles (terrain) |
-| `/humanitarian` | Humanitarian OSM tiles |
-| `/api/samples` | Raw GeoJSON data |
-| `/health` | Server health check |
+ArcheoGeneticMap uses a **thin client** architecture where filtering, color assignment, and data analysis happen server-side. The frontend is a minimal display layer that:
+
+- Fetches configuration from `/api/config` on load
+- Sends filter requests to `/api/query`
+- Renders pre-colored features on the map
+
+This design keeps logic in Julia, makes the system easier to test, and scales well as new filters are added.
+
+## API Endpoints
+
+| Path | Method | Description |
+|------|--------|-------------|
+| `/` | GET | Main map with OpenStreetMap tiles |
+| `/topo` | GET | OpenTopoMap tiles (terrain) |
+| `/humanitarian` | GET | Humanitarian OSM tiles |
+| `/api/config` | GET | Frontend configuration (color ramps, defaults, initial statistics) |
+| `/api/query` | POST | Filter and retrieve samples with colors assigned |
+| `/api/samples` | GET | Raw GeoJSON data (legacy) |
+| `/health` | GET | Server health check |
+
+### Query API
+
+```bash
+# Example query request
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dateMin": 5000,
+    "dateMax": 10000,
+    "includeUndated": true,
+    "cultureFilter": {"mode": "all", "selected": []},
+    "includeNoCulture": true,
+    "colorBy": "age",
+    "colorRamp": "viridis"
+  }'
+```
+
+Response includes:
+- `features`: GeoJSON features with `_color` property pre-assigned
+- `meta`: Counts, available cultures (for cascading filters), date statistics
 
 ## Module Structure
 
 ```
 ArcheoGeneticMap/
 ├── Project.toml              # Package dependencies
-├── README.md                 # Usage documentation
+├── README.md                 # This file
 ├── data/                     # GeoPackage files to serve
-│   └── (samples.gpkg)
 ├── src/
 │   ├── ArcheoGeneticMap.jl   # Main module entry point
-│   ├── config.jl             # Julia configuration constants
-│   ├── types.jl              # Data structures (MapBounds, MapSettings, etc.)
+│   ├── config.jl             # Configuration constants
+│   ├── types.jl              # Data structures (MapBounds, FilterRequest, etc.)
 │   ├── io.jl                 # GeoPackage reading
 │   ├── geometry.jl           # Spatial calculations
-│   ├── server.jl             # Genie routes and server
+│   ├── colors.jl             # Color ramp definitions and interpolation
+│   ├── filters.jl            # Filter application logic
+│   ├── analysis.jl           # Statistics and cascading filter options
+│   ├── query.jl              # Query orchestration
+│   ├── server.jl             # Genie routes and API endpoints
 │   └── templates/
 │       ├── templates.jl      # Template loader and JS concatenation
 │       ├── map_base.html     # HTML shell with Alpine.js bindings
 │       ├── map_styles.css    # All CSS styling
-│       ├── config.js         # JavaScript configuration (color ramps, slider settings)
-│       ├── color_ramps.js    # Color interpolation utilities
 │       ├── piecewise_scale.js # Slider scale with outlier compression
-│       ├── popup_builder.js  # Configurable popup content builder
-│       └── map_app.js        # Main Alpine.js controller + Leaflet integration
+│       ├── popup_builder.js  # Popup content builder
+│       └── map_app.js        # Alpine.js controller + Leaflet integration
 ├── bin/
 │   └── run_server.jl         # CLI entry point
 └── test/
@@ -71,15 +108,13 @@ ArcheoGeneticMap/
 
 ### Load Order
 
-Modules are loaded in dependency order to ensure configuration is available where needed.
+**Julia:** `config.jl` → `types.jl` → `io.jl` → `colors.jl` → `geometry.jl` → `analysis.jl` → `filters.jl` → `query.jl` → `templates.jl` → `server.jl`
 
-**Julia:** `config.jl` → `types.jl` → `io.jl` → `geometry.jl` → `templates.jl` → `server.jl`
-
-**JavaScript:** `config.js` → `color_ramps.js` → `piecewise_scale.js` → `popup_builder.js` → `map_app.js`
+**JavaScript:** `piecewise_scale.js` → `popup_builder.js` → `map_app.js`
 
 ## Configuration
 
-All configuration constants are centralized in two files for easy maintenance:
+Configuration is centralized in Julia and served to the frontend via `/api/config`.
 
 ### Julia Configuration (`config.jl`)
 
@@ -88,7 +123,7 @@ All configuration constants are centralized in two files for easy maintenance:
 DEFAULT_PADDING = 5.0          # degrees around data bounds
 DEFAULT_ZOOM = 6               # initial zoom level
 DEFAULT_POINT_COLOR = "#e41a1c"
-DEFAULT_POINT_RADIUS = 6
+DEFAULT_POINT_RADIUS = 4
 
 # Date range defaults (when no dated samples exist)
 DEFAULT_MIN_AGE = 0.0
@@ -99,30 +134,19 @@ DEFAULT_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
 DEFAULT_TILE_ATTRIBUTION = "© OpenStreetMap contributors"
 ```
 
-### JavaScript Configuration (`config.js`)
+### Color Ramps (`colors.jl`)
 
-```javascript
-Config.colorRamps      // Color ramp definitions (viridis, plasma, etc.)
-Config.colorRampLabels // Human-readable labels for dropdowns
-Config.slider          // Slider range (min: 0, max: 1000) and segment breakpoints
-Config.defaults        // Default filter values (colorRamp, includeUndated, etc.)
+Color ramps are defined server-side and served to the frontend:
+
+```julia
+const COLOR_RAMPS = Dict{String, ColorRamp}(
+    "viridis" => ColorRamp("viridis", ["#440154", ...], "Viridis (purple → yellow)"),
+    "plasma" => ColorRamp("plasma", [...], "Plasma (purple → orange)"),
+    # ...
+)
 ```
 
-To add a new color ramp, simply add it to `Config.colorRamps` and `Config.colorRampLabels` in `config.js`.
-
-### Server-Provided Date Statistics
-
-The server calculates date range statistics (min, max, p2, p98 percentiles) and passes them to the frontend via the `dateRange` config object. This enables the piecewise slider to compress outliers without client-side recalculation:
-
-```javascript
-// Available in window.ArcheoGeneticMap.config.dateRange
-{
-    min: 250,      // Absolute minimum age (youngest sample)
-    max: 45000,    // Absolute maximum age (oldest sample)  
-    p2: 1200,      // 2nd percentile (for slider left segment)
-    p98: 12000     // 98th percentile (for slider right segment)
-}
-```
+To add a new color ramp, add it to `COLOR_RAMPS` in `colors.jl`.
 
 ## Customization
 
@@ -134,7 +158,7 @@ settings = MapSettings(:topo)
 
 # Or customize
 settings = MapSettings(
-    padding = 2.0,           # degrees around data bounds
+    padding = 2.0,
     initial_zoom = 8,
     point_color = "#0000ff",
     point_radius = 8
@@ -143,7 +167,7 @@ settings = MapSettings(
 serve_map("data/samples.gpkg", settings=settings)
 ```
 
-### Programmatic Usage
+### Programmatic Query Processing
 
 ```julia
 using ArcheoGeneticMap
@@ -151,15 +175,21 @@ using ArcheoGeneticMap
 # Load data
 geojson = read_geopackage("data/samples.gpkg")
 
-# Calculate bounds and center
-bounds = calculate_bounds(geojson, 5.0)
-center_lat, center_lon = calculate_center(bounds)
-min_age, max_age = calculate_date_range(geojson)
+# Create a filter request
+request = FilterRequest(
+    date_min = 5000.0,
+    date_max = 10000.0,
+    culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+    color_by = :age,
+    color_ramp = "viridis"
+)
 
-# Render HTML (useful for embedding or custom servers)
-settings = MapSettings()
-config = MapConfig(center_lat, center_lon, 6, min_age, max_age, settings)
-html = render_map_html(config)
+# Process query
+response = process_query(geojson, request)
+
+# Access results
+println("Filtered: $(response.meta.filtered_count) samples")
+println("Available cultures: $(response.meta.available_cultures)")
 ```
 
 ## Development
@@ -172,42 +202,15 @@ julia test/runtests.jl
 
 ### Template Development
 
-The frontend JavaScript is split into focused modules:
+Templates are cached by default. During development, call `clear_template_cache()` to pick up changes without restarting the server.
+
+The frontend JavaScript is minimal - most logic lives server-side. The JS modules handle:
 
 | File | Purpose |
 |------|---------|
-| `config.js` | Centralized configuration (color ramps, slider settings, defaults) |
-| `color_ramps.js` | Color interpolation utilities (uses Config for ramp definitions) |
-| `piecewise_scale.js` | Bidirectional slider-to-value conversion (uses Config for breakpoints) |
-| `popup_builder.js` | Configurable HTML popup generation for map markers |
-| `map_app.js` | Main application logic (Alpine.js state management + Leaflet map) |
-
-These modules are concatenated by `templates.jl` before injection into the HTML. Each module uses the IIFE pattern to avoid global namespace pollution while remaining compatible with browsers without a build step.
-
-Templates are cached by default. During development, call `clear_template_cache()` to pick up changes without restarting the server.
-
-### Reusing JavaScript Modules
-
-The modules are designed for reuse when adding new filters:
-
-```javascript
-// Create a piecewise scale for any numeric variable
-const scale = PiecewiseScale.fromValues(myDataArray);
-const sliderPos = scale.toSlider(dataValue);
-const dataValue = scale.toValue(sliderPos);
-
-// Color any value using a ramp
-const color = ColorRamps.forValue(value, min, max, 'viridis', '#gray');
-
-// Get CSS gradient for legend display
-const gradient = ColorRamps.gradient('plasma');
-
-// Build popups with custom field configuration
-const html = PopupBuilder.build(props, [
-    { key: 'sample_id', label: 'Sample', bold: true },
-    { key: 'age', label: 'Age', suffix: ' BP' }
-]);
-```
+| `piecewise_scale.js` | Slider-to-value conversion for outlier compression |
+| `popup_builder.js` | HTML popup generation for map markers |
+| `map_app.js` | Alpine.js state management, API calls, Leaflet rendering |
 
 ## Data Format
 
@@ -221,8 +224,6 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 | `culture` | String | No | Archaeological culture |
 | `average_age_calbp` | Float | No | Calibrated age in years BP |
 
-Use `gpkg_maker_09.jl` to convert CSV files to this format.
-
 ## Roadmap
 
 - [x] Color by age with selectable color ramps
@@ -230,15 +231,15 @@ Use `gpkg_maker_09.jl` to convert CSV files to this format.
 - [x] Centralized configuration files
 - [x] Server-side percentile calculation
 - [x] First major reorganization of code
-- [ ] Culture filter and color coding 
+- [x] Culture filter and color coding 
+- [x] Second major reorganization (thin client architecture)
+- [x] Cascading filters (cultures update based on date range)
 - [ ] Y-haplogroup filter and color coding
 - [ ] mtDNA filter and color coding
-- [ ] Second major reorganization of code
 - [ ] Performance and scalability 
     - [ ] vector tiles  
     - [ ] dynamic clustering
     - [ ] progressive loading
-- [ ] Clean up and package gpkg_maker
 - [ ] Refine popups
 - [ ] Display customization
     - [ ] Marker radius customization
@@ -246,6 +247,3 @@ Use `gpkg_maker_09.jl` to convert CSV files to this format.
 - [ ] Nice to have data management
     - [ ] Export filtered dataset
     - [ ] URL state persistence
-- [ ] Extreme reaches
-    - [ ] Spatial statistics
-    - [ ] Simulations

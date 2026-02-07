@@ -4,8 +4,7 @@
  * Creates bidirectional mappings between a slider and data values,
  * with piecewise linear scaling to handle outliers gracefully.
  * 
- * Dependencies:
- *   - Config: Must be loaded first (provides slider.min, slider.max, slider.segments)
+ * No external dependencies - uses hardcoded defaults that match server config.
  * 
  * Usage:
  *   const scale = PiecewiseScale.create(dataMin, dataMax, p2, p98);
@@ -15,6 +14,21 @@
  */
 
 const PiecewiseScale = (function() {
+    
+    // =========================================================================
+    // Default Configuration (matches server-side config.jl)
+    // =========================================================================
+    
+    const DEFAULTS = {
+        slider: {
+            min: 0,
+            max: 1000,
+            segments: {
+                leftBreak: 50,
+                rightBreak: 950
+            }
+        }
+    };
     
     // =========================================================================
     // Scale Factory
@@ -31,10 +45,9 @@ const PiecewiseScale = (function() {
      * @returns {Object} Scale object with toSlider, toValue, and utility methods
      */
     function create(dataMin, dataMax, p2 = null, p98 = null, segments = null) {
-        // Use Config values as defaults
-        const SLIDER_MIN = Config.slider.min;
-        const SLIDER_MAX = Config.slider.max;
-        const { leftBreak, rightBreak } = segments || Config.slider.segments;
+        const SLIDER_MIN = DEFAULTS.slider.min;
+        const SLIDER_MAX = DEFAULTS.slider.max;
+        const { leftBreak, rightBreak } = segments || DEFAULTS.slider.segments;
         
         /**
          * Convert a data value to slider position
@@ -123,62 +136,15 @@ const PiecewiseScale = (function() {
     }
     
     // =========================================================================
-    // Percentile Calculation Utility
-    // =========================================================================
-    
-    /**
-     * Calculate percentiles from an array of numbers
-     * @param {number[]} values - Array of numeric values
-     * @param {number[]} percentiles - Array of percentiles to calculate (0-100)
-     * @returns {Object} Object mapping percentile to value
-     */
-    function calculatePercentiles(values, percentiles = [2, 98]) {
-        if (!values || values.length === 0) {
-            return null;
-        }
-        
-        const sorted = [...values].sort((a, b) => a - b);
-        const result = {
-            min: sorted[0],
-            max: sorted[sorted.length - 1]
-        };
-        
-        for (const p of percentiles) {
-            const key = 'p' + p;
-            const index = Math.floor(sorted.length * (p / 100));
-            result[key] = sorted[Math.min(index, sorted.length - 1)];
-        }
-        
-        return result;
-    }
-    
-    /**
-     * Create a scale from an array of values, automatically calculating percentiles
-     * @param {number[]} values - Array of numeric values
-     * @param {Object} [segments] - Optional custom segment boundaries
-     * @returns {Object} Scale object
-     */
-    function fromValues(values, segments = null) {
-        const stats = calculatePercentiles(values, [2, 98]);
-        if (!stats) {
-            // Return a degenerate scale
-            return create(0, 1, null, null, segments);
-        }
-        return create(stats.min, stats.max, stats.p2, stats.p98, segments);
-    }
-    
-    // =========================================================================
     // Export Public API
     // =========================================================================
     
     return {
         create,
-        fromValues,
-        calculatePercentiles,
-        // Expose config values for external reference (read from Config)
-        get SLIDER_MIN() { return Config.slider.min; },
-        get SLIDER_MAX() { return Config.slider.max; },
-        get DEFAULT_SEGMENTS() { return Config.slider.segments; }
+        // Expose constants for external reference
+        SLIDER_MIN: DEFAULTS.slider.min,
+        SLIDER_MAX: DEFAULTS.slider.max,
+        DEFAULT_SEGMENTS: DEFAULTS.slider.segments
     };
     
 })();

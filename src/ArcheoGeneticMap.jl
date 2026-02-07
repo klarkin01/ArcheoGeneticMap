@@ -15,9 +15,13 @@ Then open http://localhost:8000 in your browser.
 # Module Structure
 
 - `Config`: Centralized configuration constants
-- `Types`: Core data structures (MapBounds, MapSettings, MapConfig)
+- `Types`: Core data structures (MapBounds, MapSettings, MapConfig, FilterRequest, etc.)
 - `IO`: GeoPackage file reading
-- `Geometry`: Spatial calculations (bounds, center, date ranges)
+- `Geometry`: Spatial calculations (bounds, center)
+- `Colors`: Color ramp definitions and interpolation
+- `Filters`: Filter application logic
+- `Analysis`: Statistical analysis and cascading filter options
+- `Query`: Orchestration layer for processing queries
 - `Templates`: HTML/CSS/JS template rendering
 - `Server`: Genie web server and routes
 
@@ -29,12 +33,6 @@ Use preset tile layers with `MapSettings(:preset_name)`:
 - `:humanitarian` - Humanitarian OpenStreetMap
 """
 module ArcheoGeneticMap
-
-# =============================================================================
-# Dependencies
-# =============================================================================
-
-#using Reexport
 
 # =============================================================================
 # Submodules - order matters for dependencies
@@ -49,11 +47,20 @@ include("io.jl")
 # Types depends on Config
 include("types.jl")
 
+# Colors depends on Config and Types
+include("colors.jl")
+
 # Geometry depends on Config
 include("geometry.jl")
 
-#data_analysis depends on Config and Types
-include("data_analysis.jl")
+# Analysis depends on Config and Types
+include("analysis.jl")
+
+# Filters depends on Types
+include("filters.jl")
+
+# Query depends on Filters, Analysis, Colors
+include("query.jl")
 
 # Templates depends on Types
 include("templates/templates.jl")
@@ -65,22 +72,37 @@ include("server.jl")
 # Exports
 # =============================================================================
 
-# Re-export key types
-export MapBounds, MapSettings, MapConfig, DateStatistics, CultureStatistics, TilePreset, TILE_PRESETS
+# Core types
+export MapBounds, MapSettings, MapConfig, DateStatistics, CultureStatistics
+export TilePreset, TILE_PRESETS
 
-# Re-export IO functions
+# Query types
+export ColorRamp, CultureFilter, FilterRequest, FilterMeta, QueryResponse
+
+# Color exports
+export COLOR_RAMPS, CULTURE_PALETTE
+export interpolate_color, color_for_age, color_for_culture
+
+# IO functions
 export read_geopackage
 
-# Re-export geometry functions
+# Geometry functions
 export calculate_bounds, calculate_center
 
-# Re-export data analysis functions
+# Analysis functions
 export calculate_date_range, calculate_date_statistics, calculate_culture_statistics
+export compute_available_cultures, compute_available_date_range, build_filter_meta
 
-# Re-export template functions
+# Filter functions
+export apply_date_filter, apply_culture_filter, apply_filters
+
+# Query functions
+export process_query, assign_colors!
+
+# Template functions
 export render_map_html, clear_template_cache
 
-# Re-export server functions
+# Server functions
 export serve_map, start_server, setup_routes, configure_data_source
 
 end # module

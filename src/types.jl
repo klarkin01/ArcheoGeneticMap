@@ -9,6 +9,7 @@ Core data structures for archaeological map visualization.
 #       DEFAULT_TILE_URL, DEFAULT_TILE_ATTRIBUTION
 
 export MapBounds, MapSettings, MapConfig, DateStatistics, CultureStatistics, TilePreset, TILE_PRESETS
+export ColorRamp, CultureFilter, FilterRequest, FilterMeta, QueryResponse
 
 """
     MapBounds
@@ -78,17 +79,17 @@ const TILE_PRESETS = Dict{Symbol, TilePreset}(
     :osm => TilePreset(
         "OpenStreetMap",
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "Â© OpenStreetMap contributors"
+        "Ã‚Â© OpenStreetMap contributors"
     ),
     :topo => TilePreset(
         "OpenTopoMap", 
         "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "Â© OpenStreetMap contributors, Â© OpenTopoMap"
+        "Ã‚Â© OpenStreetMap contributors, Ã‚Â© OpenTopoMap"
     ),
     :humanitarian => TilePreset(
         "Humanitarian",
         "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
-        "Â© OpenStreetMap contributors"
+        "Ã‚Â© OpenStreetMap contributors"
     )
 )
 
@@ -148,4 +149,132 @@ struct MapConfig
     date_stats::DateStatistics
     culture_stats::CultureStatistics
     settings::MapSettings
+end
+
+# =============================================================================
+# Color Types
+# =============================================================================
+
+"""
+    ColorRamp
+
+Definition of a color ramp for data visualization.
+
+# Fields
+- `name`: Identifier used in API requests (e.g., "viridis")
+- `colors`: Array of hex colors from low to high values
+- `label`: Human-readable label for UI display
+"""
+struct ColorRamp
+    name::String
+    colors::Vector{String}
+    label::String
+end
+
+# =============================================================================
+# Filter/Query Types
+# =============================================================================
+
+"""
+    CultureFilter
+
+Specifies which cultures to include in the filter.
+
+# Fields
+- `selected`: Vector of culture names to include (empty = none selected)
+
+The interpretation is:
+- Empty array + include_no_culture=false → show nothing
+- Empty array + include_no_culture=true → show only samples without culture
+- Non-empty array → show selected cultures (+ no-culture samples if flag set)
+
+# Examples
+```julia
+CultureFilter(String[])           # No cultures selected
+CultureFilter(["Yamnaya"])        # Show only Yamnaya
+CultureFilter(["Yamnaya", "Bell Beaker"])  # Show multiple cultures
+```
+"""
+struct CultureFilter
+    selected::Vector{String}
+end
+
+# Default constructor is already provided by the struct
+# CultureFilter() creates an instance with an uninitialized selected field,
+# so we need an explicit zero-arg constructor
+CultureFilter() = CultureFilter(String[])
+
+"""
+    FilterRequest
+
+Represents a filter request from the frontend.
+All filter fields are optional - nothing means "no filter applied".
+
+# Fields
+- `date_min`: Minimum age in cal BP (nothing = no lower bound)
+- `date_max`: Maximum age in cal BP (nothing = no upper bound)
+- `include_undated`: Whether to include samples without dates
+- `culture_filter`: Culture filter specification
+- `include_no_culture`: Whether to include samples without culture data
+- `color_by`: How to color markers (:age, :culture, or nothing for default)
+- `color_ramp`: Name of color ramp to use (e.g., "viridis")
+"""
+struct FilterRequest
+    date_min::Union{Float64, Nothing}
+    date_max::Union{Float64, Nothing}
+    include_undated::Bool
+    culture_filter::CultureFilter
+    include_no_culture::Bool
+    color_by::Union{Symbol, Nothing}
+    color_ramp::String
+end
+
+# Default constructor with sensible defaults
+function FilterRequest(;
+    date_min::Union{Float64, Nothing} = nothing,
+    date_max::Union{Float64, Nothing} = nothing,
+    include_undated::Bool = true,
+    culture_filter::CultureFilter = CultureFilter(),
+    include_no_culture::Bool = true,
+    color_by::Union{Symbol, Nothing} = nothing,
+    color_ramp::String = "viridis"
+)
+    FilterRequest(date_min, date_max, include_undated, culture_filter, include_no_culture, color_by, color_ramp)
+end
+
+"""
+    FilterMeta
+
+Metadata about filtered results and available options.
+This drives what the UI can display for cascading filters.
+
+# Fields
+- `total_count`: Total number of samples in the dataset
+- `filtered_count`: Number of samples after filtering
+- `available_cultures`: Cultures available given current date filter
+- `available_date_range`: Date range available given current culture filter
+- `date_statistics`: Full date statistics for slider configuration
+- `culture_legend`: Vector of (culture_name, color) pairs for legend display
+"""
+struct FilterMeta
+    total_count::Int
+    filtered_count::Int
+    available_cultures::Vector{String}
+    available_date_range::Tuple{Float64, Float64}
+    date_statistics::DateStatistics
+    culture_legend::Vector{Tuple{String, String}}
+end
+
+"""
+    QueryResponse
+
+Complete response to a filter query.
+
+# Fields
+- `features`: GeoJSON features with `_color` property added
+- `meta`: Metadata about the results and available options
+"""
+struct QueryResponse
+    features::Vector{Dict{String, Any}}
+    meta::FilterMeta
 end
