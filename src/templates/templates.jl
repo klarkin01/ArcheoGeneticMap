@@ -1,7 +1,10 @@
 """
-    ArcheoMap.Templates
+    ArcheoGeneticMap.Templates
 
 Template loading, assembly, and rendering for the web interface.
+
+The frontend fetches configuration via /api/config (Strategy B),
+so this module only assembles HTML, CSS, and JS without injecting config.
 """
 
 using JSON3
@@ -50,43 +53,13 @@ function clear_template_cache()
     empty!(TEMPLATE_CACHE)
 end
 
-"""
-    build_config_json(config::MapConfig) -> String
-
-Build the JSON configuration object for the frontend.
-"""
-function build_config_json(config)
-    config_dict = Dict{String, Any}(
-        "center" => [config.center_lat, config.center_lon],
-        "zoom" => config.zoom,
-        "dateRange" => Dict(
-            "min" => config.date_stats.min,
-            "max" => config.date_stats.max,
-            "p2" => config.date_stats.p2,
-            "p98" => config.date_stats.p98
-        ),
-        "cultureStats" => Dict(
-            "cultureNames" => config.culture_stats.culture_names
-        ),
-        "style" => Dict(
-            "pointColor" => config.settings.point_color,
-            "pointRadius" => config.settings.point_radius,
-            "tileUrl" => config.settings.tile_url,
-            "tileAttribution" => config.settings.tile_attribution
-        )
-    )
-    
-    return JSON3.write(config_dict)
-end
-
 # JavaScript modules to load, in dependency order
-# Config must come first as other modules depend on it
+# Note: color_ramps.js removed - colors now computed server-side
+# Note: config.js removed - config now fetched via /api/config
 const JS_MODULES = [
-    "config.js",           # No dependencies - must be first
-    "color_ramps.js",      # Depends on Config
-    "piecewise_scale.js",  # Depends on Config
-    "popup_builder.js",    # No dependencies
-    "map_app.js"           # Depends on all above
+    "piecewise_scale.js",  # Slider scaling (uses config from server)
+    "popup_builder.js",    # Popup HTML generation
+    "map_app.js"           # Main application
 ]
 
 """
@@ -111,15 +84,18 @@ end
 """
     render_map_html(config::MapConfig) -> String
 
-Render the complete map HTML by assembling templates and injecting configuration.
+Render the complete map HTML by assembling templates.
+
+Note: Configuration is no longer injected - the frontend fetches it via /api/config.
+The config parameter is kept for API compatibility but only used minimally.
 
 # Arguments
-- `config::MapConfig`: Complete map configuration including center, zoom, and settings
+- `config::MapConfig`: Map configuration (kept for compatibility)
 
 # Returns
 Complete HTML string ready to serve
 """
-function render_map_html(config)
+function render_map_html(config::MapConfig)
     # Load template components
     html_template = load_template("map_base.html")
     css_content = load_template("map_styles.css")
@@ -127,12 +103,8 @@ function render_map_html(config)
     # Load and concatenate JavaScript modules
     js_content = load_javascript_modules()
     
-    # Build configuration JSON
-    config_json = build_config_json(config)
-    
-    # Assemble the final HTML
+    # Assemble the final HTML (no config injection needed)
     html = replace(html_template,
-        "{{CONFIG}}" => config_json,
         "{{STYLES}}" => css_content,
         "{{SCRIPTS}}" => js_content
     )
@@ -141,17 +113,24 @@ function render_map_html(config)
 end
 
 """
-    render_map_html(; center_lat, center_lon, zoom, date_stats, settings) -> String
+    render_map_html() -> String
 
-Convenience method to render map HTML from individual parameters.
+Render the map HTML without any configuration.
+Configuration is fetched by the frontend via /api/config.
 """
-function render_map_html(;
-    center_lat::Float64,
-    center_lon::Float64,
-    zoom::Int,
-    date_stats::DateStatistics,
-    settings::MapSettings
-)
-    config = MapConfig(center_lat, center_lon, zoom, date_stats, settings)
-    return render_map_html(config)
+function render_map_html()
+    # Load template components
+    html_template = load_template("map_base.html")
+    css_content = load_template("map_styles.css")
+    
+    # Load and concatenate JavaScript modules
+    js_content = load_javascript_modules()
+    
+    # Assemble the final HTML
+    html = replace(html_template,
+        "{{STYLES}}" => css_content,
+        "{{SCRIPTS}}" => js_content
+    )
+    
+    return html
 end
