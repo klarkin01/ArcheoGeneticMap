@@ -122,6 +122,8 @@ function filterController() {
         // ---------------------------------------------------------------------
         sidebarOpen: true,
         cultureDropdownOpen: false,
+        yHaplogroupDropdownOpen: false,
+        mtdnaDropdownOpen: false,
         loading: false,
         sections: {
             dateRange: false,
@@ -142,9 +144,15 @@ function filterController() {
             totalCount: 0,
             filteredCount: 0,
             availableCultures: [],
+            availableYHaplogroups: [],
+            availableMtdna: [],
+            filteredYHaplogroups: [],
+            filteredMtdna: [],
             availableDateRange: { min: 0, max: 50000 },
             dateStatistics: { min: 0, max: 50000, p2: 0, p98: 50000 },
-            cultureLegend: []
+            cultureLegend: [],
+            yHaplogroupLegend: [],
+            mtdnaLegend: []
         },
         
         // ---------------------------------------------------------------------
@@ -154,15 +162,28 @@ function filterController() {
             dateMin: null,
             dateMax: null,
             includeUndated: true,
-            includeNoCulture: true
+            includeNoCulture: true,
+            includeNoYHaplogroup: true,
+            includeNoMtdna: true
         },
         
         // Culture filter state - just track selected cultures
         selectedCultures: [],
         
+        // Y-haplogroup filter state
+        selectedYHaplogroups: [],
+        yHaplogroupSearchText: '',
+        
+        // mtDNA filter state
+        selectedMtdna: [],
+        mtdnaSearchText: '',
+        
         // Color settings
-        colorBy: null,  // null, 'age', 'culture'
+        colorBy: null,  // null, 'age', 'culture', 'y_haplogroup', 'mtdna'
         colorRamp: 'viridis',
+        cultureColorRamp: 'viridis',
+        yHaplogroupColorRamp: 'viridis',
+        mtdnaColorRamp: 'viridis',
         
         // Slider positions (0-1000 scale, UI concern only)
         sliderPositions: { min: 0, max: 1000 },
@@ -190,6 +211,22 @@ function filterController() {
         
         get allCulturesSelected() {
             return this.selectedCultures.length === this.availableCultures.length;
+        },
+        
+        get availableYHaplogroups() {
+            return this.meta.filteredYHaplogroups || this.meta.availableYHaplogroups || [];
+        },
+        
+        get allYHaplogroupsSelected() {
+            return this.selectedYHaplogroups.length === this.availableYHaplogroups.length;
+        },
+        
+        get availableMtdna() {
+            return this.meta.filteredMtdna || this.meta.availableMtdna || [];
+        },
+        
+        get allMtdnaSelected() {
+            return this.selectedMtdna.length === this.availableMtdna.length;
         },
         
         get availableColorRamps() {
@@ -236,10 +273,21 @@ function filterController() {
                 // Initialize culture selection to all
                 this.selectedCultures = [...this.config.allCultures];
                 
+                // Initialize Y-haplogroup selection to all
+                this.selectedYHaplogroups = [...this.config.allYHaplogroups];
+                
+                // Initialize mtDNA selection to all
+                this.selectedMtdna = [...this.config.allMtdna];
+                
                 // Set defaults
                 this.filters.includeUndated = this.config.defaults.includeUndated;
                 this.filters.includeNoCulture = this.config.defaults.includeNoCulture;
+                this.filters.includeNoYHaplogroup = this.config.defaults.includeNoYHaplogroup;
+                this.filters.includeNoMtdna = this.config.defaults.includeNoMtdna;
                 this.colorRamp = this.config.defaults.colorRamp;
+                this.cultureColorRamp = this.config.defaults.cultureColorRamp;
+                this.yHaplogroupColorRamp = this.config.defaults.yHaplogroupColorRamp;
+                this.mtdnaColorRamp = this.config.defaults.mtdnaColorRamp;
                 
                 // Fetch initial data
                 await this.applyFilters();
@@ -265,8 +313,17 @@ function filterController() {
                 includeUndated: this.filters.includeUndated,
                 selectedCultures: this.selectedCultures,
                 includeNoCulture: this.filters.includeNoCulture,
+                yHaplogroupSearchText: this.yHaplogroupSearchText,
+                selectedYHaplogroups: this.selectedYHaplogroups,
+                includeNoYHaplogroup: this.filters.includeNoYHaplogroup,
+                mtdnaSearchText: this.mtdnaSearchText,
+                selectedMtdna: this.selectedMtdna,
+                includeNoMtdna: this.filters.includeNoMtdna,
                 colorBy: this.colorBy,
-                colorRamp: this.colorRamp
+                colorRamp: this.colorRamp,
+                cultureColorRamp: this.cultureColorRamp,
+                yHaplogroupColorRamp: this.yHaplogroupColorRamp,
+                mtdnaColorRamp: this.mtdnaColorRamp
             };
         },
         
@@ -299,6 +356,24 @@ function filterController() {
                 this.features = data.features;
                 this.meta = data.meta;
                 
+                // Sync selectedCultures with availableCultures
+                // Keep only cultures that are both selected AND available given current filters
+                this.selectedCultures = this.selectedCultures.filter(
+                    culture => this.meta.availableCultures.includes(culture)
+                );
+                
+                // Sync selectedYHaplogroups with availableYHaplogroups
+                const availableY = this.meta.filteredYHaplogroups || this.meta.availableYHaplogroups || [];
+                this.selectedYHaplogroups = this.selectedYHaplogroups.filter(
+                    hap => availableY.includes(hap)
+                );
+                
+                // Sync selectedMtdna with availableMtdna
+                const availableMt = this.meta.filteredMtdna || this.meta.availableMtdna || [];
+                this.selectedMtdna = this.selectedMtdna.filter(
+                    hap => availableMt.includes(hap)
+                );
+                
                 // Update map
                 updateMapLayer(
                     this.features,
@@ -321,6 +396,50 @@ function filterController() {
         applyFiltersDebounced: debounce(function() {
             this.applyFilters();
         }, 200),
+        
+        /**
+         * Reset all filters to initial state
+         */
+        resetFilters() {
+            if (!this.config || !this.dateScale) return;
+            
+            const stats = this.config.dateStatistics;
+            
+            // Reset date range to p2-p98
+            this.filters.dateMin = stats.p2;
+            this.filters.dateMax = stats.p98;
+            
+            // Reset slider positions
+            this.sliderPositions.min = 1000 - this.dateScale.toSlider(this.filters.dateMax);
+            this.sliderPositions.max = 1000 - this.dateScale.toSlider(this.filters.dateMin);
+            
+            // Reset culture selection to all
+            this.selectedCultures = [...this.config.allCultures];
+            
+            // Reset Y-haplogroup selection to all
+            this.selectedYHaplogroups = [...this.config.allYHaplogroups];
+            this.yHaplogroupSearchText = '';
+            
+            // Reset mtDNA selection to all
+            this.selectedMtdna = [...this.config.allMtdna];
+            this.mtdnaSearchText = '';
+            
+            // Reset include flags to defaults
+            this.filters.includeUndated = this.config.defaults.includeUndated;
+            this.filters.includeNoCulture = this.config.defaults.includeNoCulture;
+            this.filters.includeNoYHaplogroup = this.config.defaults.includeNoYHaplogroup;
+            this.filters.includeNoMtdna = this.config.defaults.includeNoMtdna;
+            
+            // Reset color settings
+            this.colorBy = null;
+            this.colorRamp = this.config.defaults.colorRamp;
+            this.cultureColorRamp = this.config.defaults.cultureColorRamp;
+            this.yHaplogroupColorRamp = this.config.defaults.yHaplogroupColorRamp;
+            this.mtdnaColorRamp = this.config.defaults.mtdnaColorRamp;
+            
+            // Apply the reset filters
+            this.applyFilters();
+        },
         
         // ---------------------------------------------------------------------
         // Date Range Methods
@@ -408,6 +527,15 @@ function filterController() {
             this.applyFilters();
         },
         
+        /**
+         * Handle culture color ramp selection change
+         */
+        onCultureColorRampChange() {
+            if (this.colorBy === 'culture') {
+                this.applyFilters();
+            }
+        },
+        
         // ---------------------------------------------------------------------
         // Culture Filter Methods
         // ---------------------------------------------------------------------
@@ -474,14 +602,200 @@ function filterController() {
             return this.meta.cultureLegend || [];
         },
         
+        // ---------------------------------------------------------------------
+        // Y-Haplogroup Filter Methods
+        // ---------------------------------------------------------------------
+        
+        /**
+         * Get summary text for Y-haplogroup multi-select
+         */
+        selectedYHaplogroupsSummary() {
+            const count = this.selectedYHaplogroups.length;
+            const total = this.availableYHaplogroups.length;
+            
+            if (count === 0) {
+                return 'None selected';
+            }
+            if (count === total) {
+                return 'All haplogroups';
+            }
+            if (count === 1) {
+                return this.selectedYHaplogroups[0];
+            }
+            return count + ' haplogroups selected';
+        },
+        
+        /**
+         * Toggle a single Y-haplogroup selection
+         */
+        toggleYHaplogroup(haplogroup) {
+            const index = this.selectedYHaplogroups.indexOf(haplogroup);
+            if (index === -1) {
+                this.selectedYHaplogroups.push(haplogroup);
+            } else {
+                this.selectedYHaplogroups.splice(index, 1);
+            }
+            this.applyFilters();
+        },
+        
+        /**
+         * Toggle all Y-haplogroups on/off
+         */
+        toggleAllYHaplogroups() {
+            if (this.allYHaplogroupsSelected) {
+                this.selectedYHaplogroups = [];
+            } else {
+                this.selectedYHaplogroups = [...this.availableYHaplogroups];
+            }
+            this.applyFilters();
+        },
+        
+        /**
+         * Check if a Y-haplogroup is currently selected
+         */
+        isYHaplogroupSelected(haplogroup) {
+            return this.selectedYHaplogroups.includes(haplogroup);
+        },
+        
+        /**
+         * Handle Y-haplogroup search
+         */
+        onYHaplogroupSearch() {
+            // Search is applied via backend filtering
+            this.applyFilters();
+        },
+        
+        /**
+         * Get Y-haplogroups to show in legend
+         */
+        yHaplogroupLegendItems() {
+            return this.meta.yHaplogroupLegend || [];
+        },
+        
+        /**
+         * Handle color by Y-haplogroup toggle
+         */
+        onColorByYHaplogroupChange() {
+            if (this.colorBy === 'y_haplogroup') {
+                this.colorBy = null;
+            } else {
+                this.colorBy = 'y_haplogroup';
+            }
+            this.applyFilters();
+        },
+        
+        /**
+         * Handle Y-haplogroup color ramp selection change
+         */
+        onYHaplogroupColorRampChange() {
+            if (this.colorBy === 'y_haplogroup') {
+                this.applyFilters();
+            }
+        },
+        
+        // ---------------------------------------------------------------------
+        // mtDNA Filter Methods
+        // ---------------------------------------------------------------------
+        
+        /**
+         * Get summary text for mtDNA multi-select
+         */
+        selectedMtdnaSummary() {
+            const count = this.selectedMtdna.length;
+            const total = this.availableMtdna.length;
+            
+            if (count === 0) {
+                return 'None selected';
+            }
+            if (count === total) {
+                return 'All haplogroups';
+            }
+            if (count === 1) {
+                return this.selectedMtdna[0];
+            }
+            return count + ' haplogroups selected';
+        },
+        
+        /**
+         * Toggle a single mtDNA selection
+         */
+        toggleMtdna(mtdna) {
+            const index = this.selectedMtdna.indexOf(mtdna);
+            if (index === -1) {
+                this.selectedMtdna.push(mtdna);
+            } else {
+                this.selectedMtdna.splice(index, 1);
+            }
+            this.applyFilters();
+        },
+        
+        /**
+         * Toggle all mtDNA on/off
+         */
+        toggleAllMtdna() {
+            if (this.allMtdnaSelected) {
+                this.selectedMtdna = [];
+            } else {
+                this.selectedMtdna = [...this.availableMtdna];
+            }
+            this.applyFilters();
+        },
+        
+        /**
+         * Check if an mtDNA is currently selected
+         */
+        isMtdnaSelected(mtdna) {
+            return this.selectedMtdna.includes(mtdna);
+        },
+        
+        /**
+         * Handle mtDNA search
+         */
+        onMtdnaSearch() {
+            // Search is applied via backend filtering
+            this.applyFilters();
+        },
+        
+        /**
+         * Get mtDNA to show in legend
+         */
+        mtdnaLegendItems() {
+            return this.meta.mtdnaLegend || [];
+        },
+        
+        /**
+         * Handle color by mtDNA toggle
+         */
+        onColorByMtdnaChange() {
+            if (this.colorBy === 'mtdna') {
+                this.colorBy = null;
+            } else {
+                this.colorBy = 'mtdna';
+            }
+            this.applyFilters();
+        },
+        
+        /**
+         * Handle mtDNA color ramp selection change
+         */
+        onMtdnaColorRampChange() {
+            if (this.colorBy === 'mtdna') {
+                this.applyFilters();
+            }
+        },
+        
+        // ---------------------------------------------------------------------
+        // Color Ramp Utilities
+        // ---------------------------------------------------------------------
+        
         /**
          * Generate a preview gradient for the selected color ramp
          */
-        colorRampGradient() {
-            if (!this.config || !this.config.colorRamps[this.colorRamp]) {
+        colorRampGradient(rampName) {
+            if (!this.config || !this.config.colorRamps[rampName]) {
                 return 'transparent';
             }
-            const colors = this.config.colorRamps[this.colorRamp].colors;
+            const colors = this.config.colorRamps[rampName].colors;
             return 'linear-gradient(to right, ' + colors.join(', ') + ')';
         }
     };

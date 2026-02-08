@@ -44,6 +44,25 @@ body {
     align-items: center;
 }
 
+.reset-button {
+    padding: 4px 10px;
+    background: #495057;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.reset-button:hover {
+    background: #6c757d;
+}
+
+.reset-button:active {
+    background: #343a40;
+}
+
 .sidebar-content {
     flex: 1;
     overflow-y: auto;
@@ -406,11 +425,11 @@ body {
 }
 
 /* ==========================================================================
-   Culture Legend
+   Legend Display
    ========================================================================== */
 
 .culture-legend {
-    max-height: 150px;
+    max-height: 400px;
     overflow-y: auto;
     margin-top: 10px;
     padding: 8px;
@@ -479,4 +498,55 @@ body {
     font-size: 12px;
     color: #6c757d;
     font-style: italic;
+}
+/* ==========================================================================
+   Haplogroup Search Input
+   ========================================================================== */
+
+.haplogroup-container {
+    padding: 8px 0;
+}
+
+.search-input-wrapper {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #80bdff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.search-input::placeholder {
+    color: #adb5bd;
+    font-style: italic;
+}
+
+.search-button {
+    padding: 6px 12px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.search-button:hover {
+    background: #0056b3;
+}
+
+.search-button:active {
+    background: #004085;
 }

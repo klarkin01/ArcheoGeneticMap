@@ -9,7 +9,7 @@ Core data structures for archaeological map visualization.
 #       DEFAULT_TILE_URL, DEFAULT_TILE_ATTRIBUTION
 
 export MapBounds, MapSettings, MapConfig, DateStatistics, CultureStatistics, TilePreset, TILE_PRESETS
-export ColorRamp, CultureFilter, FilterRequest, FilterMeta, QueryResponse
+export ColorRamp, CultureFilter, HaplogroupFilter, FilterRequest, FilterMeta, QueryResponse
 
 """
     MapBounds
@@ -79,17 +79,17 @@ const TILE_PRESETS = Dict{Symbol, TilePreset}(
     :osm => TilePreset(
         "OpenStreetMap",
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "Ã‚Â© OpenStreetMap contributors"
+        "© OpenStreetMap contributors"
     ),
     :topo => TilePreset(
         "OpenTopoMap", 
         "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "Ã‚Â© OpenStreetMap contributors, Ã‚Â© OpenTopoMap"
+        "© OpenStreetMap contributors, © OpenTopoMap"
     ),
     :humanitarian => TilePreset(
         "Humanitarian",
         "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
-        "Ã‚Â© OpenStreetMap contributors"
+        "© OpenStreetMap contributors"
     )
 )
 
@@ -131,8 +131,6 @@ end
 Statistics about unique cultures in the dataset.
 """
 struct CultureStatistics
-    #unique_cultures::Int
-    #culture_counts::Dict{String, Int}
     culture_names::Vector{String}
 end
 
@@ -187,22 +185,35 @@ The interpretation is:
 - Empty array + include_no_culture=false → show nothing
 - Empty array + include_no_culture=true → show only samples without culture
 - Non-empty array → show selected cultures (+ no-culture samples if flag set)
-
-# Examples
-```julia
-CultureFilter(String[])           # No cultures selected
-CultureFilter(["Yamnaya"])        # Show only Yamnaya
-CultureFilter(["Yamnaya", "Bell Beaker"])  # Show multiple cultures
-```
 """
 struct CultureFilter
     selected::Vector{String}
 end
 
-# Default constructor is already provided by the struct
-# CultureFilter() creates an instance with an uninitialized selected field,
-# so we need an explicit zero-arg constructor
+# Default constructor
 CultureFilter() = CultureFilter(String[])
+
+"""
+    HaplogroupFilter
+
+Specifies haplogroup filtering with text search capability.
+
+# Fields
+- `search_text`: Text to filter haplogroup list (case-insensitive prefix match)
+- `selected`: Vector of haplogroup names to include (empty = none selected)
+
+The interpretation is:
+- Empty array + include_no_haplogroup=false → show nothing
+- Empty array + include_no_haplogroup=true → show only samples without haplogroup
+- Non-empty array → show selected haplogroups (+ no-haplogroup samples if flag set)
+"""
+struct HaplogroupFilter
+    search_text::String
+    selected::Vector{String}
+end
+
+# Default constructor
+HaplogroupFilter() = HaplogroupFilter("", String[])
 
 """
     FilterRequest
@@ -216,8 +227,15 @@ All filter fields are optional - nothing means "no filter applied".
 - `include_undated`: Whether to include samples without dates
 - `culture_filter`: Culture filter specification
 - `include_no_culture`: Whether to include samples without culture data
-- `color_by`: How to color markers (:age, :culture, or nothing for default)
-- `color_ramp`: Name of color ramp to use (e.g., "viridis")
+- `y_haplogroup_filter`: Y-haplogroup filter specification
+- `include_no_y_haplogroup`: Whether to include samples without Y-haplogroup
+- `mtdna_filter`: mtDNA haplogroup filter specification
+- `include_no_mtdna`: Whether to include samples without mtDNA
+- `color_by`: How to color markers (:age, :culture, :y_haplogroup, :mtdna, or nothing)
+- `color_ramp`: Name of color ramp to use for age coloring (e.g., "viridis")
+- `culture_color_ramp`: Name of color ramp to use for culture coloring
+- `y_haplogroup_color_ramp`: Name of color ramp to use for Y-haplogroup coloring
+- `mtdna_color_ramp`: Name of color ramp to use for mtDNA coloring
 """
 struct FilterRequest
     date_min::Union{Float64, Nothing}
@@ -225,8 +243,15 @@ struct FilterRequest
     include_undated::Bool
     culture_filter::CultureFilter
     include_no_culture::Bool
+    y_haplogroup_filter::HaplogroupFilter
+    include_no_y_haplogroup::Bool
+    mtdna_filter::HaplogroupFilter
+    include_no_mtdna::Bool
     color_by::Union{Symbol, Nothing}
     color_ramp::String
+    culture_color_ramp::String
+    y_haplogroup_color_ramp::String
+    mtdna_color_ramp::String
 end
 
 # Default constructor with sensible defaults
@@ -236,10 +261,24 @@ function FilterRequest(;
     include_undated::Bool = true,
     culture_filter::CultureFilter = CultureFilter(),
     include_no_culture::Bool = true,
+    y_haplogroup_filter::HaplogroupFilter = HaplogroupFilter(),
+    include_no_y_haplogroup::Bool = true,
+    mtdna_filter::HaplogroupFilter = HaplogroupFilter(),
+    include_no_mtdna::Bool = true,
     color_by::Union{Symbol, Nothing} = nothing,
-    color_ramp::String = "viridis"
+    color_ramp::String = "viridis",
+    culture_color_ramp::String = "viridis",
+    y_haplogroup_color_ramp::String = "viridis",
+    mtdna_color_ramp::String = "viridis"
 )
-    FilterRequest(date_min, date_max, include_undated, culture_filter, include_no_culture, color_by, color_ramp)
+    FilterRequest(
+        date_min, date_max, include_undated,
+        culture_filter, include_no_culture,
+        y_haplogroup_filter, include_no_y_haplogroup,
+        mtdna_filter, include_no_mtdna,
+        color_by, color_ramp,
+        culture_color_ramp, y_haplogroup_color_ramp, mtdna_color_ramp
+    )
 end
 
 """
@@ -251,18 +290,30 @@ This drives what the UI can display for cascading filters.
 # Fields
 - `total_count`: Total number of samples in the dataset
 - `filtered_count`: Number of samples after filtering
-- `available_cultures`: Cultures available given current date filter
-- `available_date_range`: Date range available given current culture filter
+- `available_cultures`: Cultures available given current filters
+- `available_y_haplogroups`: Y-haplogroups available given current filters
+- `available_mtdna`: mtDNA haplogroups available given current filters
+- `filtered_y_haplogroups`: Y-haplogroups after search text filtering
+- `filtered_mtdna`: mtDNA haplogroups after search text filtering
+- `available_date_range`: Date range available given current filters
 - `date_statistics`: Full date statistics for slider configuration
 - `culture_legend`: Vector of (culture_name, color) pairs for legend display
+- `y_haplogroup_legend`: Vector of (haplogroup, color) pairs for legend display
+- `mtdna_legend`: Vector of (haplogroup, color) pairs for legend display
 """
 struct FilterMeta
     total_count::Int
     filtered_count::Int
     available_cultures::Vector{String}
+    available_y_haplogroups::Vector{String}
+    available_mtdna::Vector{String}
+    filtered_y_haplogroups::Vector{String}
+    filtered_mtdna::Vector{String}
     available_date_range::Tuple{Float64, Float64}
     date_statistics::DateStatistics
     culture_legend::Vector{Tuple{String, String}}
+    y_haplogroup_legend::Vector{Tuple{String, String}}
+    mtdna_legend::Vector{Tuple{String, String}}
 end
 
 """
