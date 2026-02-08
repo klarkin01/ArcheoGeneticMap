@@ -13,25 +13,17 @@ export process_query, assign_colors!
 
 """
     assign_colors!(features::Vector, request::FilterRequest, 
-                   available_cultures::Vector{String},
+                   meta::FilterMeta,
                    date_range::Tuple{Float64, Float64}) -> Nothing
 
 Assign colors to features in-place based on the request's color settings.
 Adds a `_color` property to each feature's properties.
-
-# Arguments
-- `features`: Vector of GeoJSON feature Dicts (modified in place)
-- `request`: FilterRequest specifying color_by and color_ramp
-- `available_cultures`: List of cultures for categorical coloring
-- `date_range`: (min, max) date range for age-based coloring
 """
 function assign_colors!(features::Vector,
                         request::FilterRequest,
-                        available_cultures::Vector{String},
+                        meta::FilterMeta,
                         date_range::Tuple{Float64, Float64})
     color_by = request.color_by
-    
-    # Default color from config
     default_color = DEFAULT_POINT_COLOR
     
     for feature in features
@@ -50,7 +42,24 @@ function assign_colors!(features::Vector,
             culture = get(props, "culture", nothing)
             props["_color"] = color_for_culture(
                 culture,
-                available_cultures,
+                request.culture_filter.selected,
+                request.culture_color_ramp,
+                default_color = default_color
+            )
+        elseif color_by == :y_haplogroup
+            y_hap = get(props, "y_haplogroup", nothing)
+            props["_color"] = color_for_haplogroup(
+                y_hap,
+                request.y_haplogroup_filter.selected,
+                request.y_haplogroup_color_ramp,
+                default_color = default_color
+            )
+        elseif color_by == :mtdna
+            mtdna = get(props, "mtdna", nothing)
+            props["_color"] = color_for_haplogroup(
+                mtdna,
+                request.mtdna_filter.selected,
+                request.mtdna_color_ramp,
                 default_color = default_color
             )
         else
@@ -76,13 +85,6 @@ This is the main entry point for the /api/query endpoint. It:
 2. Computes metadata (counts, available options)
 3. Assigns colors to filtered features
 4. Returns the complete response
-
-# Arguments
-- `all_features`: Complete dataset as vector of GeoJSON feature Dicts
-- `request`: FilterRequest from the frontend
-
-# Returns
-QueryResponse with filtered features and metadata
 """
 function process_query(all_features::Vector, request::FilterRequest)
     # Step 1: Apply filters
@@ -102,7 +104,7 @@ function process_query(all_features::Vector, request::FilterRequest)
     assign_colors!(
         filtered_features,
         request,
-        meta.available_cultures,
+        meta,
         filtered_date_range
     )
     

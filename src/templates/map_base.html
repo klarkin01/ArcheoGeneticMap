@@ -22,6 +22,11 @@
         <aside class="sidebar" :class="{ 'collapsed': !sidebarOpen }">
             <div class="sidebar-header">
                 <span>Filters & Controls</span>
+                <button class="reset-button" 
+                        @click="resetFilters()" 
+                        title="Reset all filters to default">
+                    &#x21BA; Reset
+                </button>
             </div>
             
             <div class="sidebar-content">
@@ -162,6 +167,18 @@
                                 </div>
                                 
                                 <div class="color-ramp-options" x-show="colorBy === 'culture'" x-transition>
+                                    <!-- Color ramp selector -->
+                                    <select class="color-ramp-select"
+                                            x-model="cultureColorRamp"
+                                            @change="onCultureColorRampChange()">
+                                        <template x-for="ramp in availableColorRamps" :key="ramp.value">
+                                            <option :value="ramp.value" x-text="ramp.label"></option>
+                                        </template>
+                                    </select>
+                                    
+                                    <!-- Color ramp preview -->
+                                    <div class="color-ramp-preview" :style="{ background: colorRampGradient(cultureColorRamp) }"></div>
+                                    
                                     <!-- Culture color legend -->
                                     <div class="culture-legend">
                                         <template x-for="item in cultureLegendItems()" :key="item.name">
@@ -182,25 +199,201 @@
                     </div>
                 </div>
                 
-                <!-- Y Haplogroup Filter (placeholder) -->
+                <!-- Y Haplogroup Filter -->
                 <div class="filter-section">
                     <div class="filter-header" @click="sections.yHaplogroup = !sections.yHaplogroup">
                         <span>Y Haplogroup</span>
                         <span class="chevron" :class="{ 'collapsed': !sections.yHaplogroup }">&#x25BC;</span>
                     </div>
                     <div class="filter-body" x-show="sections.yHaplogroup">
-                        <p class="placeholder-text">Coming soon</p>
+                        <div class="haplogroup-container">
+                            <!-- Search input -->
+                            <label class="filter-label">Search Haplogroups</label>
+                            <div class="search-input-wrapper">
+                                <input type="text" 
+                                       class="search-input" 
+                                       x-model="yHaplogroupSearchText"
+                                       @keyup.enter="onYHaplogroupSearch()"
+                                       placeholder="Type prefix and press Enter (e.g., R)">
+                                <button class="search-button" @click="onYHaplogroupSearch()">Search</button>
+                            </div>
+                            
+                            <!-- Multi-select dropdown -->
+                            <label class="filter-label">Select Haplogroups</label>
+                            <div class="multi-select-wrapper">
+                                <div class="multi-select-toggle" @click="yHaplogroupDropdownOpen = !yHaplogroupDropdownOpen">
+                                    <span x-text="selectedYHaplogroupsSummary()"></span>
+                                    <span class="chevron" :class="{ 'collapsed': !yHaplogroupDropdownOpen }">&#x25BC;</span>
+                                </div>
+                                <div class="multi-select-dropdown" x-show="yHaplogroupDropdownOpen" @click.away="yHaplogroupDropdownOpen = false">
+                                    <!-- Select All option -->
+                                    <label class="multi-select-option select-all">
+                                        <input type="checkbox" 
+                                            :checked="allYHaplogroupsSelected"
+                                            @change="toggleAllYHaplogroups()">
+                                        <span>All</span>
+                                    </label>
+                                    <div class="multi-select-divider"></div>
+                                    <!-- Individual haplogroup options -->
+                                    <template x-for="haplogroup in availableYHaplogroups" :key="haplogroup">
+                                        <label class="multi-select-option">
+                                            <input type="checkbox" 
+                                                :value="haplogroup"
+                                                :checked="isYHaplogroupSelected(haplogroup)"
+                                                @change="toggleYHaplogroup(haplogroup)">
+                                            <span x-text="haplogroup"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <div class="checkbox-row">
+                                <input type="checkbox" 
+                                    id="includeNoYHaplogroup" 
+                                    x-model="filters.includeNoYHaplogroup"
+                                    @change="applyFilters()">
+                                <label for="includeNoYHaplogroup">Include samples with no Y-haplogroup</label>
+                            </div>
+                            
+                            <!-- Color by Y-Haplogroup Controls -->
+                            <div class="color-ramp-controls">
+                                <div class="checkbox-row">
+                                    <input type="checkbox" 
+                                        id="colorByYHaplogroup" 
+                                        :checked="colorBy === 'y_haplogroup'"
+                                        @change="onColorByYHaplogroupChange()">
+                                    <label for="colorByYHaplogroup">Color by Y-haplogroup</label>
+                                </div>
+                                
+                                <div class="color-ramp-options" x-show="colorBy === 'y_haplogroup'" x-transition>
+                                    <!-- Color ramp selector -->
+                                    <select class="color-ramp-select"
+                                            x-model="yHaplogroupColorRamp"
+                                            @change="onYHaplogroupColorRampChange()">
+                                        <template x-for="ramp in availableColorRamps" :key="ramp.value">
+                                            <option :value="ramp.value" x-text="ramp.label"></option>
+                                        </template>
+                                    </select>
+                                    
+                                    <!-- Color ramp preview -->
+                                    <div class="color-ramp-preview" :style="{ background: colorRampGradient(yHaplogroupColorRamp) }"></div>
+                                    
+                                    <!-- Y-haplogroup color legend -->
+                                    <div class="culture-legend">
+                                        <template x-for="item in yHaplogroupLegendItems()" :key="item.name">
+                                            <div class="culture-legend-item">
+                                                <span class="culture-color-swatch" 
+                                                    :style="{ backgroundColor: item.color }"></span>
+                                                <span class="culture-legend-label" x-text="item.name"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="stats">
+                                <span x-text="selectedYHaplogroups.length"></span> of <span x-text="availableYHaplogroups.length"></span> haplogroups selected
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                <!-- mtDNA Filter (placeholder) -->
+                <!-- mtDNA Filter -->
                 <div class="filter-section">
                     <div class="filter-header" @click="sections.mtdna = !sections.mtdna">
                         <span>mtDNA</span>
                         <span class="chevron" :class="{ 'collapsed': !sections.mtdna }">&#x25BC;</span>
                     </div>
                     <div class="filter-body" x-show="sections.mtdna">
-                        <p class="placeholder-text">Coming soon</p>
+                        <div class="haplogroup-container">
+                            <!-- Search input -->
+                            <label class="filter-label">Search Haplogroups</label>
+                            <div class="search-input-wrapper">
+                                <input type="text" 
+                                       class="search-input" 
+                                       x-model="mtdnaSearchText"
+                                       @keyup.enter="onMtdnaSearch()"
+                                       placeholder="Type prefix and press Enter (e.g., H)">
+                                <button class="search-button" @click="onMtdnaSearch()">Search</button>
+                            </div>
+                            
+                            <!-- Multi-select dropdown -->
+                            <label class="filter-label">Select Haplogroups</label>
+                            <div class="multi-select-wrapper">
+                                <div class="multi-select-toggle" @click="mtdnaDropdownOpen = !mtdnaDropdownOpen">
+                                    <span x-text="selectedMtdnaSummary()"></span>
+                                    <span class="chevron" :class="{ 'collapsed': !mtdnaDropdownOpen }">&#x25BC;</span>
+                                </div>
+                                <div class="multi-select-dropdown" x-show="mtdnaDropdownOpen" @click.away="mtdnaDropdownOpen = false">
+                                    <!-- Select All option -->
+                                    <label class="multi-select-option select-all">
+                                        <input type="checkbox" 
+                                            :checked="allMtdnaSelected"
+                                            @change="toggleAllMtdna()">
+                                        <span>All</span>
+                                    </label>
+                                    <div class="multi-select-divider"></div>
+                                    <!-- Individual haplogroup options -->
+                                    <template x-for="mtdna in availableMtdna" :key="mtdna">
+                                        <label class="multi-select-option">
+                                            <input type="checkbox" 
+                                                :value="mtdna"
+                                                :checked="isMtdnaSelected(mtdna)"
+                                                @change="toggleMtdna(mtdna)">
+                                            <span x-text="mtdna"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <div class="checkbox-row">
+                                <input type="checkbox" 
+                                    id="includeNoMtdna" 
+                                    x-model="filters.includeNoMtdna"
+                                    @change="applyFilters()">
+                                <label for="includeNoMtdna">Include samples with no mtDNA</label>
+                            </div>
+                            
+                            <!-- Color by mtDNA Controls -->
+                            <div class="color-ramp-controls">
+                                <div class="checkbox-row">
+                                    <input type="checkbox" 
+                                        id="colorByMtdna" 
+                                        :checked="colorBy === 'mtdna'"
+                                        @change="onColorByMtdnaChange()">
+                                    <label for="colorByMtdna">Color by mtDNA</label>
+                                </div>
+                                
+                                <div class="color-ramp-options" x-show="colorBy === 'mtdna'" x-transition>
+                                    <!-- Color ramp selector -->
+                                    <select class="color-ramp-select"
+                                            x-model="mtdnaColorRamp"
+                                            @change="onMtdnaColorRampChange()">
+                                        <template x-for="ramp in availableColorRamps" :key="ramp.value">
+                                            <option :value="ramp.value" x-text="ramp.label"></option>
+                                        </template>
+                                    </select>
+                                    
+                                    <!-- Color ramp preview -->
+                                    <div class="color-ramp-preview" :style="{ background: colorRampGradient(mtdnaColorRamp) }"></div>
+                                    
+                                    <!-- mtDNA color legend -->
+                                    <div class="culture-legend">
+                                        <template x-for="item in mtdnaLegendItems()" :key="item.name">
+                                            <div class="culture-legend-item">
+                                                <span class="culture-color-swatch" 
+                                                    :style="{ backgroundColor: item.color }"></span>
+                                                <span class="culture-legend-label" x-text="item.name"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="stats">
+                                <span x-text="selectedMtdna.length"></span> of <span x-text="availableMtdna.length"></span> haplogroups selected
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -215,7 +408,7 @@
         <button class="sidebar-toggle" 
                 :class="{ 'collapsed': !sidebarOpen }"
                 @click="sidebarOpen = !sidebarOpen">
-            <span x-text="sidebarOpen ? 'â—€' : 'â–¶'"></span>
+            <span x-text="sidebarOpen ? '&#x25C0;' : '&#x25B6;'"></span>
         </button>
     </div>
     

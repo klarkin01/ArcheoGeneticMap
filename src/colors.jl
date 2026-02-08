@@ -6,7 +6,8 @@ This is the single source of truth for color configuration.
 """
 
 export COLOR_RAMPS, CULTURE_PALETTE
-export interpolate_color, color_for_age, color_for_culture, hex_to_rgb, rgb_to_hex
+export interpolate_color, color_for_age, color_for_culture, color_for_haplogroup
+export hex_to_rgb, rgb_to_hex
 
 # =============================================================================
 # Color Ramp Definitions
@@ -57,7 +58,8 @@ const COLOR_RAMPS = Dict{String, ColorRamp}(
 
 """
 Color palette for categorical culture coloring.
-Colors are assigned in order as cultures are encountered.
+DEPRECATED: Now using color ramps for categorical data.
+Kept for backward compatibility.
 """
 const CULTURE_PALETTE = [
     "#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00",
@@ -185,27 +187,71 @@ function color_for_age(age, date_min::Float64, date_max::Float64, ramp_name::Str
 end
 
 """
-    color_for_culture(culture, available_cultures::Vector{String}) -> String
+    color_for_culture(culture, selected_cultures::Vector{String}, ramp_name::String) -> String
 
-Get color for a culture based on its position in the available cultures list.
-Uses the CULTURE_PALETTE, cycling through if more cultures than colors.
+Get color for a culture based on its position in the selected cultures list.
+Uses sequential color ramp interpolation.
 
-Returns default color for missing/nothing culture values.
+Returns default color for missing/nothing culture values or cultures not in the selected list.
 """
-function color_for_culture(culture, available_cultures::Vector{String};
+function color_for_culture(culture, selected_cultures::Vector{String}, ramp_name::String;
                            default_color::String = "#808080")
     if culture === nothing || ismissing(culture) || culture == ""
         return default_color
     end
     
-    idx = findfirst(==(culture), available_cultures)
+    if isempty(selected_cultures)
+        return default_color
+    end
+    
+    idx = findfirst(==(culture), selected_cultures)
     if idx === nothing
         return default_color
     end
     
-    # Cycle through palette if more cultures than colors
-    palette_idx = mod1(idx, length(CULTURE_PALETTE))
-    return CULTURE_PALETTE[palette_idx]
+    # Map index to [0, 1] range for color ramp interpolation
+    n = length(selected_cultures)
+    if n == 1
+        t = 0.5  # Center of ramp for single item
+    else
+        t = (idx - 1) / (n - 1)
+    end
+    
+    return interpolate_color(ramp_name, t)
+end
+
+"""
+    color_for_haplogroup(haplogroup, selected_haplogroups::Vector{String}, ramp_name::String) -> String
+
+Get color for a haplogroup based on its position in the selected haplogroups list.
+Uses sequential color ramp interpolation.
+
+Returns default color for missing/nothing haplogroup values or haplogroups not in the selected list.
+"""
+function color_for_haplogroup(haplogroup, selected_haplogroups::Vector{String}, ramp_name::String;
+                             default_color::String = "#808080")
+    if haplogroup === nothing || ismissing(haplogroup) || haplogroup == ""
+        return default_color
+    end
+    
+    if isempty(selected_haplogroups)
+        return default_color
+    end
+    
+    idx = findfirst(==(haplogroup), selected_haplogroups)
+    if idx === nothing
+        return default_color
+    end
+    
+    # Map index to [0, 1] range for color ramp interpolation
+    n = length(selected_haplogroups)
+    if n == 1
+        t = 0.5  # Center of ramp for single item
+    else
+        t = (idx - 1) / (n - 1)
+    end
+    
+    return interpolate_color(ramp_name, t)
 end
 
 """

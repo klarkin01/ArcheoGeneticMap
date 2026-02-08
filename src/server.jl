@@ -11,10 +11,9 @@ using Genie.Responses
 export setup_routes, start_server, serve_map, configure_data_source
 
 # Global reference to the data file path
-# Set via serve_map() or configure_data_source()
 const DATA_SOURCE = Ref{String}("")
 
-# Cache for loaded GeoJSON data (avoids re-reading file on every request)
+# Cache for loaded GeoJSON data
 const GEOJSON_CACHE = Ref{Union{Dict{String, Any}, Nothing}}(nothing)
 
 """
@@ -24,7 +23,7 @@ Set the GeoPackage file to serve.
 """
 function configure_data_source(filepath::String)
     DATA_SOURCE[] = filepath
-    GEOJSON_CACHE[] = nothing  # Clear cache when data source changes
+    GEOJSON_CACHE[] = nothing
 end
 
 """
@@ -75,7 +74,6 @@ function parse_filter_request(payload::Dict)
     date_min = get(payload, "dateMin", nothing)
     date_max = get(payload, "dateMax", nothing)
     
-    # Convert to Float64 if present
     date_min = date_min === nothing ? nothing : Float64(date_min)
     date_max = date_max === nothing ? nothing : Float64(date_max)
     
@@ -87,11 +85,25 @@ function parse_filter_request(payload::Dict)
     # Parse include flags
     include_undated = get(payload, "includeUndated", true)
     include_no_culture = get(payload, "includeNoCulture", true)
+    include_no_y_haplogroup = get(payload, "includeNoYHaplogroup", true)
+    include_no_mtdna = get(payload, "includeNoMtdna", true)
     
-    # Parse culture filter - now just an array of selected cultures
+    # Parse culture filter
     selected_cultures_raw = get(payload, "selectedCultures", [])
     selected_cultures = String[string(s) for s in selected_cultures_raw]
     culture_filter = CultureFilter(selected_cultures)
+    
+    # Parse Y-haplogroup filter
+    y_search_text = get(payload, "yHaplogroupSearchText", "")
+    selected_y_haplogroups_raw = get(payload, "selectedYHaplogroups", [])
+    selected_y_haplogroups = String[string(s) for s in selected_y_haplogroups_raw]
+    y_haplogroup_filter = HaplogroupFilter(y_search_text, selected_y_haplogroups)
+    
+    # Parse mtDNA filter
+    mtdna_search_text = get(payload, "mtdnaSearchText", "")
+    selected_mtdna_raw = get(payload, "selectedMtdna", [])
+    selected_mtdna = String[string(s) for s in selected_mtdna_raw]
+    mtdna_filter = HaplogroupFilter(mtdna_search_text, selected_mtdna)
     
     # Parse color settings
     color_by_str = get(payload, "colorBy", nothing)
@@ -102,6 +114,9 @@ function parse_filter_request(payload::Dict)
     end
     
     color_ramp = get(payload, "colorRamp", "viridis")
+    culture_color_ramp = get(payload, "cultureColorRamp", "viridis")
+    y_haplogroup_color_ramp = get(payload, "yHaplogroupColorRamp", "viridis")
+    mtdna_color_ramp = get(payload, "mtdnaColorRamp", "viridis")
     
     return FilterRequest(
         date_min = date_min,
@@ -109,8 +124,15 @@ function parse_filter_request(payload::Dict)
         include_undated = include_undated,
         culture_filter = culture_filter,
         include_no_culture = include_no_culture,
+        y_haplogroup_filter = y_haplogroup_filter,
+        include_no_y_haplogroup = include_no_y_haplogroup,
+        mtdna_filter = mtdna_filter,
+        include_no_mtdna = include_no_mtdna,
         color_by = color_by,
-        color_ramp = color_ramp
+        color_ramp = color_ramp,
+        culture_color_ramp = culture_color_ramp,
+        y_haplogroup_color_ramp = y_haplogroup_color_ramp,
+        mtdna_color_ramp = mtdna_color_ramp
     )
 end
 
@@ -126,6 +148,10 @@ function query_response_to_dict(response::QueryResponse)
             "totalCount" => response.meta.total_count,
             "filteredCount" => response.meta.filtered_count,
             "availableCultures" => response.meta.available_cultures,
+            "availableYHaplogroups" => response.meta.available_y_haplogroups,
+            "availableMtdna" => response.meta.available_mtdna,
+            "filteredYHaplogroups" => response.meta.filtered_y_haplogroups,
+            "filteredMtdna" => response.meta.filtered_mtdna,
             "availableDateRange" => Dict(
                 "min" => response.meta.available_date_range[1],
                 "max" => response.meta.available_date_range[2]
@@ -139,6 +165,14 @@ function query_response_to_dict(response::QueryResponse)
             "cultureLegend" => [
                 Dict("name" => name, "color" => color)
                 for (name, color) in response.meta.culture_legend
+            ],
+            "yHaplogroupLegend" => [
+                Dict("name" => name, "color" => color)
+                for (name, color) in response.meta.y_haplogroup_legend
+            ],
+            "mtdnaLegend" => [
+                Dict("name" => name, "color" => color)
+                for (name, color) in response.meta.mtdna_legend
             ]
         )
     )
@@ -156,11 +190,14 @@ Build the configuration response for GET /api/config.
 function build_config_response()
     geojson = get_cached_geojson()
     
-    # Compute initial statistics from full dataset
     date_stats = calculate_date_statistics(geojson)
     culture_stats = calculate_culture_statistics(geojson)
     bounds = calculate_bounds(geojson, DEFAULT_PADDING)
     center_lat, center_lon = calculate_center(bounds)
+    
+    # Extract all haplogroups for initial display
+    all_y_haplogroups = extract_y_haplogroups(geojson["features"])
+    all_mtdna = extract_mtdna(geojson["features"])
     
     return Dict(
         "colorRamps" => get_color_ramp_info(),
@@ -176,7 +213,12 @@ function build_config_response()
         "defaults" => Dict(
             "includeUndated" => true,
             "includeNoCulture" => true,
+            "includeNoYHaplogroup" => true,
+            "includeNoMtdna" => true,
             "colorRamp" => "viridis",
+            "cultureColorRamp" => "viridis",
+            "yHaplogroupColorRamp" => "viridis",
+            "mtdnaColorRamp" => "viridis",
             "pointColor" => DEFAULT_POINT_COLOR,
             "pointRadius" => DEFAULT_POINT_RADIUS
         ),
@@ -192,7 +234,9 @@ function build_config_response()
             "p2" => date_stats.p2,
             "p98" => date_stats.p98
         ),
-        "allCultures" => culture_stats.culture_names
+        "allCultures" => culture_stats.culture_names,
+        "allYHaplogroups" => all_y_haplogroups,
+        "allMtdna" => all_mtdna
     )
 end
 
@@ -222,8 +266,7 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
         serve_map_response(MapSettings(:humanitarian))
     end
 
-    # TODO: Fix this
-    #Setting up favicon
+    # Favicon
     route("/favicon.ico", method = GET) do
         setheaders(Dict("Content-Type" => "image/svg+xml"))
         """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
@@ -239,16 +282,12 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
         </svg>"""
     end
     
-    # -------------------------------------------------------------------------
-    # New API Endpoints
-    # -------------------------------------------------------------------------
-    
-    # Configuration endpoint - provides all config for frontend
+    # Configuration endpoint
     route("/api/config") do
         json(build_config_response())
     end
     
-    # Query endpoint - main filter/query API
+    # Query endpoint
     route("/api/query", method = POST) do
         try
             payload = jsonpayload()
@@ -270,11 +309,7 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
         end
     end
     
-    # -------------------------------------------------------------------------
-    # Legacy Endpoints (for backward compatibility during migration)
-    # -------------------------------------------------------------------------
-    
-    # GeoJSON API endpoint (legacy - will be removed after migration)
+    # Legacy endpoints
     route("/api/samples") do
         geojson = get_cached_geojson()
         json(geojson)
@@ -298,13 +333,11 @@ Generate and serve the map HTML for a given settings configuration.
 function serve_map_response(settings::MapSettings)
     geojson = get_cached_geojson()
     
-    # Calculate bounds and center
     bounds = calculate_bounds(geojson, settings.padding)
     center_lat, center_lon = calculate_center(bounds)
     date_stats = calculate_date_statistics(geojson)
     culture_stats = calculate_culture_statistics(geojson)
     
-    # Build configuration
     config = MapConfig(
         center_lat,
         center_lon,
@@ -314,7 +347,6 @@ function serve_map_response(settings::MapSettings)
         settings
     )
     
-    # Render and return HTML
     html_content = render_map_html(config)
     return html(html_content)
 end
@@ -323,16 +355,10 @@ end
     start_server(port::Int = 8000; async::Bool = false)
 
 Start the Genie web server.
-
-# Arguments
-- `port`: Port number to listen on (default: 8000)
-- `async`: If true, start server in background (default: false)
 """
 function start_server(port::Int = 8000; async::Bool = false)
-    # Configure Genie
     Genie.config.run_as_server = true
     
-    # CORS configuration for API access
     Genie.config.cors_headers["Access-Control-Allow-Origin"] = "*"
     Genie.config.cors_headers["Access-Control-Allow-Headers"] = "Content-Type"
     Genie.config.cors_headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
@@ -348,11 +374,6 @@ end
     serve_map(filepath::String; port::Int = 8000, settings::MapSettings = MapSettings())
 
 Convenience function to configure and start the mapping server.
-
-# Arguments
-- `filepath`: Path to the GeoPackage file to serve
-- `port`: Port number (default: 8000)
-- `settings`: Default map settings
 """
 function serve_map(filepath::String; port::Int = 8000, settings::MapSettings = MapSettings())
     configure_data_source(filepath)
