@@ -234,8 +234,10 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [x] Culture filter and color coding 
 - [x] Second major reorganization (thin client architecture)
 - [x] Cascading filters (cultures update based on date range)
-- [ ] Y-haplogroup filter and color coding
-- [ ] mtDNA filter and color coding
+- [x] Y-haplogroup filter and color coding
+- [x] mtDNA filter and color coding
+- [ ] integrated geopackage maker
+- [ ] haplotree controls
 - [ ] Performance and scalability 
     - [ ] vector tiles  
     - [ ] dynamic clustering
