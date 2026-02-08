@@ -238,6 +238,7 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [x] mtDNA filter and color coding
 - [ ] integrated geopackage maker
 - [ ] haplotree controls
+- [ ] Docker build and runtime tools
 - [ ] Performance and scalability 
     - [ ] vector tiles  
     - [ ] dynamic clustering
