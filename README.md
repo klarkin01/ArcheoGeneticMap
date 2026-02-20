@@ -2,6 +2,18 @@
 
 Archaeological and paleogenomic sample visualization on interactive web maps.
 
+## Prerequisites
+
+ArcheoGeneticMap requires Julia. If you haven't used Julia before, the quickest way to install it is via **juliaup**, Julia's official installer and version manager:
+
+- **Full instructions**: https://julialang.org/install/
+- On macOS/Linux, the one-liner is: `curl -fsSL https://install.julialang.org | sh`
+- On Windows, install from the [Microsoft Store](https://apps.microsoft.com/detail/9NJNWW8PVKMN) or run `winget install julia -s msstore` in a terminal
+
+After installation, typing `julia` in your terminal should open the Julia REPL (an interactive prompt). That's all you need — no additional IDE is required, though [VS Code with the Julia extension](https://www.julia-vscode.org/docs/dev/gettingstarted/) is a comfortable option if you prefer an editor.
+
+> **Note on first-run startup time:** Julia JIT-compiles code on first use, so the server may take 30–60 seconds to start the first time. Subsequent runs within the same session are fast.
+
 ## Quick Start
 
 ```julia
