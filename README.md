@@ -71,6 +71,7 @@ This design keeps logic in Julia, makes the system easier to test, and scales we
 | `/` | GET | Main map with OpenStreetMap tiles |
 | `/topo` | GET | OpenTopoMap tiles (terrain) |
 | `/humanitarian` | GET | Humanitarian OSM tiles |
+| `/dark` | GET | Dark OSM tiles |
 | `/api/config` | GET | Frontend configuration (color ramps, defaults, initial statistics) |
 | `/api/query` | POST | Filter and retrieve samples with colors assigned |
 | `/api/samples` | GET | Raw GeoJSON data (legacy) |
