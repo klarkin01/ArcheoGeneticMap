@@ -107,7 +107,7 @@ ArcheoGeneticMap/
 │   ├── run_server.jl         # Map server CLI entry point
 │   └── run_gpkg_maker.jl     # GeoPackage maker CLI entry point
 └── test/
-    ├── runtests.jl               # Map server unit tests
+    ├── map_tests.jl               # Map server unit tests
     ├── test_gpkg_maker.jl        # GeoPackage maker unit tests
     ├── integration_gpkg_maker.jl # GeoPackage maker integration tests
     └── fixtures/
