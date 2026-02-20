@@ -8,7 +8,7 @@ export calculate_date_range, calculate_date_statistics, calculate_culture_statis
 export compute_available_cultures, compute_available_y_haplogroups, compute_available_mtdna
 export compute_available_date_range, build_filter_meta
 export extract_ages, extract_cultures, extract_y_haplogroups, extract_mtdna
-export build_culture_legend, build_haplogroup_legend
+export build_culture_legend, build_haplogroup_legend, build_y_haplotree_legend
 export filter_haplogroups_by_search
 
 # =============================================================================
@@ -542,6 +542,24 @@ function build_haplogroup_legend(selected_haplogroups::Vector{String},
     return legend
 end
 
+"""
+    build_y_haplotree_legend(terms::Vector{String},
+                             ramp_name::String) -> Vector{Tuple{String, String}}
+
+Build a legend with (term, color) pairs for Y-haplotree term coloring.
+Colors match those assigned by color_for_y_haplotree_term (first-match-wins order).
+"""
+function build_y_haplotree_legend(terms::Vector{String}, ramp_name::String)
+    legend = Tuple{String, String}[]
+    n = length(terms)
+    for (idx, term) in enumerate(terms)
+        t = n == 1 ? 0.5 : (idx - 1) / (n - 1)
+        color = interpolate_color(ramp_name, t)
+        push!(legend, (term, color))
+    end
+    return legend
+end
+
 # =============================================================================
 # Filter Metadata Builder
 # =============================================================================
@@ -634,6 +652,11 @@ function build_filter_meta(all_features::Vector,
         request.mtdna_filter.selected,
         request.mtdna_color_ramp
     )
+
+    y_haplotree_legend = build_y_haplotree_legend(
+        request.y_haplotree_filter.terms,
+        request.y_haplotree_color_ramp
+    )
     
     return FilterMeta(
         total_count,
@@ -647,6 +670,7 @@ function build_filter_meta(all_features::Vector,
         date_statistics,
         culture_legend,
         y_haplogroup_legend,
-        mtdna_legend
+        mtdna_legend,
+        y_haplotree_legend
     )
 end

@@ -23,14 +23,24 @@ Then open http://localhost:8000 in your browser.
 
 ## Features
 
-- **Interactive Map**: Pan, zoom, and click on samples for details
-- **Date Filtering**: Filter samples by calibrated BP date range with piecewise slider scaling for better control over outliers
-- **Culture Filtering**: Filter by archaeological culture with multi-select dropdown
-- **Cascading Filters**: Available cultures update based on date range selection
-- **Color by Age**: Color ramp visualization of temporal distribution (viridis, plasma, spectral, and more)
-- **Color by Culture**: Categorical coloring by archaeological culture
-- **Multiple Tile Layers**: OpenStreetMap, OpenTopoMap, Humanitarian OSM
-- **Collapsible Sidebar**: Toggle the filter panel for more map space
+**Map interaction**
+- Pan, zoom, and click markers for sample details in a popup
+- Three tile layers: OpenStreetMap, OpenTopoMap, Humanitarian OSM
+- Collapsible sidebar to maximize map space
+
+**Filtering**
+- Date range with piecewise slider scaling — 90% of slider range covers the 2nd–98th percentile; outer portions handle outliers
+- Culture — multi-select dropdown; available options cascade based on the active date range
+- Y-haplogroup — searchable list with additive text search; select individual haplogroups to include
+- Y-haplotree — token-based filter that matches nodes in the haplotree path (e.g., entering `R-M343` matches any sample whose path contains that node); mutually exclusive with Y-haplogroup filter
+- mtDNA haplogroup — searchable list with additive text search
+
+**Color coding**
+- Color by age using a selectable color ramp (viridis, plasma, spectral, warm, cool, turbo)
+- Color by culture — categorical coloring drawn from the same ramp palette
+- Color by Y-haplogroup — categorical coloring per selected haplogroup
+- Color by Y-haplotree term — categorical coloring per matched haplotree node
+- Color by mtDNA haplogroup — categorical coloring per selected haplogroup
 
 ## Architecture
 
@@ -64,16 +74,22 @@ curl -X POST http://localhost:8000/api/query \
     "dateMin": 5000,
     "dateMax": 10000,
     "includeUndated": true,
-    "cultureFilter": {"mode": "all", "selected": []},
+    "cultureFilter": {"selected": []},
     "includeNoCulture": true,
-    "colorBy": "age",
-    "colorRamp": "viridis"
+    "yHaplogroupFilter": {"searchText": "", "selected": ["R-M343", "I-M170"]},
+    "includeNoYHaplogroup": false,
+    "yHaplotreeFilter": {"terms": []},
+    "mtdnaFilter": {"searchText": "", "selected": []},
+    "includeNoMtdna": true,
+    "colorBy": "y_haplogroup",
+    "colorRamp": "viridis",
+    "yHaplogroupColorRamp": "plasma"
   }'
 ```
 
 Response includes:
 - `features`: GeoJSON features with `_color` property pre-assigned
-- `meta`: Counts, available cultures (for cascading filters), date statistics
+- `meta`: Counts, available cultures/haplogroups (for cascading filters), date statistics, and legend entries per color mode
 
 ## Module Structure
 
@@ -158,7 +174,8 @@ ColumnConfig(
     ["My Y-hap Col"],           # y_haplogroup candidates (optional)
     ["My mtDNA Col"],           # mtdna candidates (optional)
     ["My Culture Col"],         # culture candidates (optional)
-    ["My Age Col"]              # average_age_calbp candidates (optional)
+    ["My Age Col"],             # average_age_calbp candidates (optional)
+    ["My Haplotree Col"]        # y_haplotree candidates (optional)
 )
 ```
 
@@ -236,8 +253,10 @@ request = FilterRequest(
     date_min = 5000.0,
     date_max = 10000.0,
     culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
-    color_by = :age,
-    color_ramp = "viridis"
+    y_haplogroup_filter = HaplogroupFilter("", ["R-M343", "I-M170"]),
+    include_no_y_haplogroup = false,
+    color_by = :y_haplogroup,
+    y_haplogroup_color_ramp = "plasma"
 )
 
 # Process query
@@ -246,6 +265,7 @@ response = process_query(geojson, request)
 # Access results
 println("Filtered: $(response.meta.filtered_count) samples")
 println("Available cultures: $(response.meta.available_cultures)")
+println("Y-haplogroup legend: $(response.meta.y_haplogroup_legend)")
 ```
 
 ## Development
@@ -282,7 +302,8 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 | Column | Type | Required | Description |
 |--------|------|----------|-------------|
 | `sample_id` | String | Yes | Unique identifier |
-| `y_haplogroup` | String | No | Y-chromosome haplogroup |
+| `y_haplogroup` | String | No | Y-chromosome haplogroup (short form, e.g. `R-M343`) |
+| `y_haplotree` | String | No | Full haplotree path with nodes separated by `>` (e.g. `R-M207>M173>M343`) |
 | `mtdna` | String | No | Mitochondrial DNA haplogroup |
 | `culture` | String | No | Archaeological culture |
 | `average_age_calbp` | Float | No | Calibrated age in years BP |
@@ -300,8 +321,9 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [x] Y-haplogroup filter and color coding
 - [x] mtDNA filter and color coding
 - [x] Third major reorganization (config/ directory, gpkg_maker split into src/ and bin/)
-- [ ] integrated geopackage maker
-- [ ] haplotree controls
+- [x] Y-haplotree token filter (node-level matching against full haplotree path)
+- [x] Color by Y-haplotree term
+- [ ] GeoPackage maker integrated into main module (currently standalone)
 - [ ] Docker build and runtime tools
 - [ ] Performance and scalability
     - [ ] vector tiles

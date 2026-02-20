@@ -5,7 +5,7 @@ Filter application logic for GeoJSON features.
 Each filter function takes a collection of features and returns a filtered subset.
 """
 
-export apply_date_filter, apply_culture_filter, apply_y_haplogroup_filter, apply_mtdna_filter, apply_filters
+export apply_date_filter, apply_culture_filter, apply_y_haplogroup_filter, apply_mtdna_filter, apply_y_haplotree_filter, apply_filters
 
 # =============================================================================
 # Individual Filter Functions
@@ -136,6 +136,44 @@ end
 # =============================================================================
 
 """
+    apply_y_haplotree_filter(features, y_haplotree_filter::YHaplotreeFilter) -> Vector
+
+Filter features by Y-haplotree token matching.
+
+Each term in the filter is matched case-insensitively against the nodes of a
+sample's haplotree path (split on '>').  A sample is included if ANY term
+matches ANY node exactly.  Empty terms list → no filter (all samples pass).
+Samples with an empty/missing y_haplotree field are hidden when the filter is active.
+"""
+function apply_y_haplotree_filter(features::Vector,
+                                  y_haplotree_filter::YHaplotreeFilter)
+    # No terms → no filter applied
+    if isempty(y_haplotree_filter.terms)
+        return features
+    end
+
+    # Normalise terms to lowercase once
+    terms_lower = Set(lowercase(t) for t in y_haplotree_filter.terms)
+
+    return filter(features) do feature
+        path = get(feature["properties"], "y_haplotree", nothing)
+
+        # Hide samples with no haplotree data when filter is active
+        if path === nothing || ismissing(path) || path == ""
+            return false
+        end
+
+        # Split path on '>', trim whitespace, compare lowercase tokens
+        tokens = [lowercase(strip(tok)) for tok in split(string(path), '>')]
+        return any(tok -> tok in terms_lower, tokens)
+    end
+end
+
+# =============================================================================
+# Combined Filter Application
+# =============================================================================
+
+"""
     apply_filters(features, request::FilterRequest) -> Vector
 
 Apply all filters from a FilterRequest to a collection of features.
@@ -143,12 +181,18 @@ Apply all filters from a FilterRequest to a collection of features.
 Filters are applied in order:
 1. Date filter
 2. Culture filter
-3. Y-haplogroup filter
+3. Y-haplogroup filter (skipped when y_haplotree_filter is active)
 4. mtDNA filter
+5. Y-haplotree filter (skipped when y_haplogroup_filter is active)
+
+Note: y_haplogroup_filter and y_haplotree_filter are mutually exclusive.
+When y_haplotree_filter has terms, y_haplogroup_filter is ignored, and vice versa.
+The frontend enforces that only one is active at a time; this function respects
+that contract by preferring y_haplotree_filter when both are non-empty.
 """
 function apply_filters(features::Vector, request::FilterRequest)
     result = features
-    
+
     # Apply date filter
     result = apply_date_filter(
         result,
@@ -156,27 +200,32 @@ function apply_filters(features::Vector, request::FilterRequest)
         request.date_max,
         request.include_undated
     )
-    
+
     # Apply culture filter
     result = apply_culture_filter(
         result,
         request.culture_filter,
         request.include_no_culture
     )
-    
-    # Apply Y-haplogroup filter
-    result = apply_y_haplogroup_filter(
-        result,
-        request.y_haplogroup_filter,
-        request.include_no_y_haplogroup
-    )
-    
+
+    # Apply Y-haplogroup OR Y-haplotree filter (mutually exclusive)
+    if !isempty(request.y_haplotree_filter.terms)
+        # Y-haplotree takes precedence
+        result = apply_y_haplotree_filter(result, request.y_haplotree_filter)
+    else
+        result = apply_y_haplogroup_filter(
+            result,
+            request.y_haplogroup_filter,
+            request.include_no_y_haplogroup
+        )
+    end
+
     # Apply mtDNA filter
     result = apply_mtdna_filter(
         result,
         request.mtdna_filter,
         request.include_no_mtdna
     )
-    
+
     return result
 end

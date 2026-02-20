@@ -60,6 +60,17 @@ using .ArcheoGeneticMap
         @test fr.include_undated == true
         @test isempty(fr.culture_filter.selected)
         @test fr.color_ramp == "viridis"
+        @test isempty(fr.y_haplotree_filter.terms)
+        @test fr.y_haplotree_color_ramp == "viridis"
+
+        # Test YHaplotreeFilter construction
+        ytf_empty = YHaplotreeFilter()
+        @test isempty(ytf_empty.terms)
+
+        ytf_terms = YHaplotreeFilter(["M269", "L51"])
+        @test length(ytf_terms.terms) == 2
+        @test "M269" in ytf_terms.terms
+        @test "L51" in ytf_terms.terms
         
         fr_custom = FilterRequest(
             date_min = 5000.0,
@@ -179,7 +190,86 @@ using .ArcheoGeneticMap
         filtered = apply_filters(features, request)
         @test length(filtered) == 2  # 5000 Yamnaya and 8000 Bell Beaker
     end
-    
+
+    @testset "Y-Haplotree Filter" begin
+        # Features with y_haplotree paths
+        features = [
+            Dict("properties" => Dict(
+                "y_haplotree" => "R-M207>M173>M343>L754>L389>P297>M269>L23>L51",
+                "average_age_calbp" => 5000.0
+            )),
+            Dict("properties" => Dict(
+                "y_haplotree" => "I-M258>M223>L801>CTS616",
+                "average_age_calbp" => 4500.0
+            )),
+            Dict("properties" => Dict(
+                "y_haplotree" => "G-M201>P15>L30>L32>L43>L141",
+                "average_age_calbp" => 7000.0
+            )),
+            Dict("properties" => Dict(
+                "y_haplotree" => "",
+                "average_age_calbp" => 3000.0
+            )),
+            Dict("properties" => Dict(
+                "average_age_calbp" => 6000.0
+            ))
+        ]
+
+        # Empty filter = no filter applied (all pass)
+        filtered = apply_y_haplotree_filter(features, YHaplotreeFilter())
+        @test length(filtered) == 5
+
+        # Token "M269" matches the R path
+        filtered = apply_y_haplotree_filter(features, YHaplotreeFilter(["M269"]))
+        @test length(filtered) == 1
+        @test get(filtered[1]["properties"], "y_haplotree", "") == "R-M207>M173>M343>L754>L389>P297>M269>L23>L51"
+
+        # Token "L141" matches only the G path
+        filtered = apply_y_haplotree_filter(features, YHaplotreeFilter(["L141"]))
+        @test length(filtered) == 1
+        @test get(filtered[1]["properties"], "y_haplotree", "") == "G-M201>P15>L30>L32>L43>L141"
+
+        # Two terms: "M269" OR "M223" → R and I paths
+        filtered = apply_y_haplotree_filter(features, YHaplotreeFilter(["M269", "M223"]))
+        @test length(filtered) == 2
+
+        # Case-insensitive: "m269" should match "M269" token
+        filtered = apply_y_haplotree_filter(features, YHaplotreeFilter(["m269"]))
+        @test length(filtered) == 1
+
+        # Partial match must NOT succeed: "L14" should not match "L141"
+        filtered = apply_y_haplotree_filter(features, YHaplotreeFilter(["L14"]))
+        @test length(filtered) == 0
+
+        # Samples with empty or missing y_haplotree hidden when filter active
+        filtered = apply_y_haplotree_filter(features, YHaplotreeFilter(["M269"]))
+        paths = [get(f["properties"], "y_haplotree", "") for f in filtered]
+        @test "" ∉ paths
+
+        # Mutual exclusivity via apply_filters:
+        # When y_haplotree_filter has terms, y_haplogroup_filter is ignored
+        feat2 = [
+            Dict("properties" => Dict(
+                "y_haplotree"  => "R-M207>M173>M343>M269",
+                "y_haplogroup" => "R1b",
+                "average_age_calbp" => 5000.0
+            )),
+            Dict("properties" => Dict(
+                "y_haplotree"  => "I-M258>M223",
+                "y_haplogroup" => "I2",
+                "average_age_calbp" => 4500.0
+            ))
+        ]
+        # y_haplotree_filter active → y_haplogroup_filter should be ignored
+        req = FilterRequest(
+            y_haplogroup_filter = HaplogroupFilter("", ["R1b"]),
+            include_no_y_haplogroup = false,
+            y_haplotree_filter = YHaplotreeFilter(["M223"])
+        )
+        filtered = apply_filters(feat2, req)
+        @test length(filtered) == 1  # only I sample (M223 match), R1b haplogroup filter ignored
+    end
+
     @testset "Analysis" begin
         # Test features
         features = [

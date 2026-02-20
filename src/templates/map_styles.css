@@ -344,6 +344,16 @@ body {
 }
 
 /* ==========================================================================
+   Leaflet Popup Content
+   ========================================================================== */
+
+.leaflet-popup-content {
+    max-width: 260px;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+/* ==========================================================================
    Placeholder Text (for coming soon features)
    ========================================================================== */
 
@@ -549,4 +559,59 @@ body {
 
 .search-button:active {
     background: #004085;
+}
+
+/* ==========================================================================
+   Y-Haplotree Tag Filter
+   ========================================================================== */
+
+.haplotree-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0 10px 0;
+    align-items: center;
+}
+
+.haplotree-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px 3px 10px;
+    background: #e9ecef;
+    border: 1px solid #ced4da;
+    border-radius: 12px;
+    font-size: 12px;
+    color: #495057;
+}
+
+.haplotree-tag-remove {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+    border-radius: 50%;
+}
+
+.haplotree-tag-remove:hover {
+    background: #adb5bd;
+    color: white;
+}
+
+.clear-all-button {
+    padding: 3px 10px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 4px;
+}
+
+.clear-all-button:hover {
+    background: #b02a37;
 }
