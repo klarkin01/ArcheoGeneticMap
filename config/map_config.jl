@@ -1,8 +1,8 @@
 """
-    ArcheoGeneticMap.Config
+    map_config.jl
 
-Centralized configuration values for the application.
-This module contains only constants and default values, no logic.
+Centralized configuration values for the ArcheoGeneticMap server.
+Contains only constants and default values, no logic.
 """
 
 # =============================================================================

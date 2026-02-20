@@ -3,7 +3,7 @@ using Test
 # Add the project directory to the load path
 push!(LOAD_PATH, @__DIR__)
 
-include("ArcheoGeneticMap.jl")
+include("../src/ArcheoGeneticMap.jl")
 using .ArcheoGeneticMap
 
 @testset "ArcheoGeneticMap Tests" begin
@@ -40,23 +40,25 @@ using .ArcheoGeneticMap
         @test date_stats.p98 == 9000.0
         
         # Test CultureFilter construction
-        cf_all = CultureFilter()
-        @test cf_all.mode == :all
-        @test isempty(cf_all.selected)
+        # CultureFilter has a single `selected` field (no mode).
+        # Empty selected = no cultures explicitly chosen.
+        cf_empty = CultureFilter()
+        @test isempty(cf_empty.selected)
         
         cf_selected = CultureFilter(["Yamnaya", "Bell Beaker"])
-        @test cf_selected.mode == :selected
         @test length(cf_selected.selected) == 2
+        @test "Yamnaya" in cf_selected.selected
+        @test "Bell Beaker" in cf_selected.selected
         
-        cf_none = CultureFilter(:none, String[])
-        @test cf_none.mode == :none
+        cf_explicit_empty = CultureFilter(String[])
+        @test isempty(cf_explicit_empty.selected)
         
-        # Test FilterRequest construction
+        # Test FilterRequest construction with defaults
         fr = FilterRequest()
         @test fr.date_min === nothing
         @test fr.date_max === nothing
         @test fr.include_undated == true
-        @test fr.culture_filter.mode == :all
+        @test isempty(fr.culture_filter.selected)
         @test fr.color_ramp == "viridis"
         
         fr_custom = FilterRequest(
@@ -70,6 +72,7 @@ using .ArcheoGeneticMap
         @test fr_custom.date_max == 10000.0
         @test fr_custom.include_undated == false
         @test fr_custom.color_by == :age
+        @test "Yamnaya" in fr_custom.culture_filter.selected
     end
     
     @testset "Colors" begin
@@ -99,22 +102,31 @@ using .ArcheoGeneticMap
         @test startswith(color, "#")
         
         # Test missing age returns default
-        color = color_for_age(nothing, 0.0, 10000.0, "viridis", default_color="#gray")
-        @test color == "#gray"
+        color = color_for_age(nothing, 0.0, 10000.0, "viridis", default_color="#808080")
+        @test color == "#808080"
         
-        # Test color for culture
+        # Test color for culture — requires culture, cultures vector, and ramp name
         cultures = ["Yamnaya", "Bell Beaker", "Corded Ware"]
-        color = color_for_culture("Yamnaya", cultures)
+        color = color_for_culture("Yamnaya", cultures, "viridis")
         @test startswith(color, "#")
         
         # Different cultures get different colors
-        color1 = color_for_culture("Yamnaya", cultures)
-        color2 = color_for_culture("Bell Beaker", cultures)
+        color1 = color_for_culture("Yamnaya", cultures, "viridis")
+        color2 = color_for_culture("Bell Beaker", cultures, "viridis")
         @test color1 != color2
+        
+        # Missing culture returns default
+        color = color_for_culture(nothing, cultures, "viridis", default_color="#808080")
+        @test color == "#808080"
     end
     
     @testset "Filters" begin
-        # Create test features
+        # Test features
+        # - 5000 Yamnaya (dated, in-range for 4000-9000)
+        # - 8000 Bell Beaker (dated, in-range for 4000-9000)
+        # - 12000 Yamnaya (dated, out of 4000-9000 range)
+        # - nothing Corded Ware (undated)
+        # - 6000 nothing/no culture (dated, in-range, no culture)
         features = [
             Dict("properties" => Dict("average_age_calbp" => 5000.0, "culture" => "Yamnaya")),
             Dict("properties" => Dict("average_age_calbp" => 8000.0, "culture" => "Bell Beaker")),
@@ -123,34 +135,43 @@ using .ArcheoGeneticMap
             Dict("properties" => Dict("average_age_calbp" => 6000.0, "culture" => nothing))
         ]
         
-        # Test date filter - with range
+        # Test date filter - with range, include undated
+        # In-range dated: 5000, 8000, 6000 → 3; undated (Corded Ware) included → total 4
         filtered = apply_date_filter(features, 4000.0, 9000.0, true)
-        @test length(filtered) == 3  # 5000, 8000, and undated
+        @test length(filtered) == 4
         
         # Test date filter - exclude undated
+        # In-range dated only: 5000, 8000, 6000 → 3
         filtered = apply_date_filter(features, 4000.0, 9000.0, false)
-        @test length(filtered) == 2  # 5000 and 8000
+        @test length(filtered) == 3
         
-        # Test date filter - no constraints
+        # Test date filter - no constraints, include undated → all 5
         filtered = apply_date_filter(features, nothing, nothing, true)
         @test length(filtered) == 5
         
-        # Test culture filter - all
-        filtered = apply_culture_filter(features, CultureFilter(:all, String[]), true)
-        @test length(filtered) == 5
+        # Test culture filter - empty selected, include_no_culture=true
+        # Empty selected means no named cultures pass the filter (isempty → return false for cultured)
+        # Only no-culture samples pass when include_no_culture=true
+        filtered = apply_culture_filter(features, CultureFilter(), true)
+        @test length(filtered) == 1  # Only the no-culture (6000) sample
         
-        # Test culture filter - selected
+        # Test culture filter - empty selected, include_no_culture=false → nothing passes
+        filtered = apply_culture_filter(features, CultureFilter(), false)
+        @test length(filtered) == 0
+        
+        # Test culture filter - selected cultures, include_no_culture=false
         filtered = apply_culture_filter(features, CultureFilter(["Yamnaya"]), false)
         @test length(filtered) == 2  # Two Yamnaya samples
         
-        # Test culture filter - none
-        filtered = apply_culture_filter(features, CultureFilter(:none, String[]), false)
-        @test length(filtered) == 0
+        # Test culture filter - selected + include_no_culture
+        filtered = apply_culture_filter(features, CultureFilter(["Yamnaya"]), true)
+        @test length(filtered) == 3  # Two Yamnaya + one no-culture sample
         
-        # Test combined filters
+        # Test combined filters via FilterRequest
+        # date 4000-9000, no undated, Yamnaya + Bell Beaker cultures, no no-culture samples
         request = FilterRequest(
             date_min = 4000.0,
-            date_max = 10000.0,
+            date_max = 9000.0,
             include_undated = false,
             culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
             include_no_culture = false
@@ -193,7 +214,7 @@ using .ArcheoGeneticMap
         
         # Test that date range excludes cultures outside range
         available = compute_available_cultures(features, date_min=10000.0, date_max=15000.0, include_undated=false)
-        @test "Yamnaya" in available  # Has a 12000 sample
+        @test "Yamnaya" in available      # Has a 12000 sample
         @test !("Bell Beaker" in available)  # Only has 8000 sample
         
         # Test calculate_date_range
@@ -222,9 +243,16 @@ using .ArcheoGeneticMap
             )
         ]
         
-        # Test process_query with default request
-        request = FilterRequest()
-        response = process_query(features, request)
+        # Test process_query with default request.
+        # Default CultureFilter() is empty; default include_no_culture=true.
+        # Empty selected + include_no_culture=true → only no-culture samples pass culture filter.
+        # Neither feature has no culture, so filtered_count = 0.
+        # To get all features, explicitly select both cultures.
+        request_all = FilterRequest(
+            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+            include_no_culture = false
+        )
+        response = process_query(features, request_all)
         
         @test response.meta.total_count == 2
         @test response.meta.filtered_count == 2
@@ -235,12 +263,20 @@ using .ArcheoGeneticMap
         @test startswith(response.features[1]["properties"]["_color"], "#")
         
         # Test with color by age
-        request_age = FilterRequest(color_by = :age)
+        request_age = FilterRequest(
+            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+            include_no_culture = false,
+            color_by = :age
+        )
         response_age = process_query(features, request_age)
         @test haskey(response_age.features[1]["properties"], "_color")
         
         # Test with color by culture
-        request_culture = FilterRequest(color_by = :culture)
+        request_culture = FilterRequest(
+            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+            include_no_culture = false,
+            color_by = :culture
+        )
         response_culture = process_query(features, request_culture)
         @test haskey(response_culture.features[1]["properties"], "_color")
         
@@ -250,10 +286,14 @@ using .ArcheoGeneticMap
         @test "Bell Beaker" in response.meta.available_cultures
         
         # Test with date filter that excludes Bell Beaker
-        request_filtered = FilterRequest(date_min = 4000.0, date_max = 6000.0)
+        request_filtered = FilterRequest(
+            date_min = 4000.0,
+            date_max = 6000.0,
+            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+            include_no_culture = false
+        )
         response_filtered = process_query(features, request_filtered)
         @test response_filtered.meta.filtered_count == 1
-        # Available cultures should still show what's in range
         @test "Yamnaya" in response_filtered.meta.available_cultures
     end
     
@@ -287,15 +327,19 @@ using .ArcheoGeneticMap
     end
     
     @testset "Templates" begin
-        # Test that template files exist in templates directory
-        templates_dir = joinpath(@__DIR__, "src", "templates")
+        # In the flat project layout, template files live alongside ArcheoGeneticMap.jl.
+        # When running from the project root, @__DIR__ points to the project root.
+        # Per the README, the actual layout uses src/templates/, but the web interface
+        # uses a flat layout where templates are served from the project root.
+        # Adjust this path to match your actual directory structure.
+        templates_dir = joinpath(@__DIR__, "..", "src", "templates")
         @test isfile(joinpath(templates_dir, "map_base.html"))
         @test isfile(joinpath(templates_dir, "map_styles.css"))
         @test isfile(joinpath(templates_dir, "map_app.js"))
         @test isfile(joinpath(templates_dir, "piecewise_scale.js"))
         @test isfile(joinpath(templates_dir, "popup_builder.js"))
         
-        # config.js and color_ramps.js should NOT exist (removed in refactor)
+        # These files should NOT exist (removed in refactor)
         @test !isfile(joinpath(templates_dir, "config.js"))
         @test !isfile(joinpath(templates_dir, "color_ramps.js"))
     end

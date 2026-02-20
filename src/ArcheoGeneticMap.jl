@@ -39,7 +39,7 @@ module ArcheoGeneticMap
 # =============================================================================
 
 # Config must come first (no dependencies, provides constants for other modules)
-include("config.jl")
+include("../config/map_config.jl")
 
 # IO depends on nothing internal
 include("io.jl")
