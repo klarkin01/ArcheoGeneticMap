@@ -195,7 +195,7 @@ To add a new color ramp, add it to `COLOR_RAMPS` in `colors.jl`.
 
 ## GeoPackage Maker
 
-Source CSV files must be converted to GeoPackage format before use with the map server. The maker handles CSV files from multiple academic sources by trying a list of known column name variants.
+Source CSV files must be converted to GeoPackage format before use with the map server. The maker handles CSV files from multiple sources by trying a list of known column name variants. Currently only capable of a few sources, but it is configurable via maker_config.jl
 
 ### Usage
 
@@ -323,7 +323,7 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [x] Third major reorganization (config/ directory, gpkg_maker split into src/ and bin/)
 - [x] Y-haplotree token filter (node-level matching against full haplotree path)
 - [x] Color by Y-haplotree term
-- [ ] GeoPackage maker integrated into main module (currently standalone)
+- [x] GeoPackage maker integrated into repository (standalone process)
 - [ ] Docker build and runtime tools
 - [ ] Performance and scalability
     - [ ] vector tiles
