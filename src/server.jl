@@ -16,6 +16,9 @@ const DATA_SOURCE = Ref{String}("")
 # Cache for loaded GeoJSON data
 const GEOJSON_CACHE = Ref{Union{Dict{String, Any}, Nothing}}(nothing)
 
+#Mapsettings
+const ACTIVE_SETTINGS = Ref{MapSettings}(MapSettings())
+
 """
     configure_data_source(filepath::String)
 
@@ -238,8 +241,8 @@ function build_config_response()
         "map" => Dict(
             "center" => [center_lat, center_lon],
             "zoom" => DEFAULT_ZOOM,
-            "tileUrl" => DEFAULT_TILE_URL,
-            "tileAttribution" => DEFAULT_TILE_ATTRIBUTION
+            "tileUrl" => ACTIVE_SETTINGS[].tile_url,
+            "tileAttribution" => ACTIVE_SETTINGS[].tile_attribution
         ),
         "dateStatistics" => Dict(
             "min" => date_stats.min,
@@ -266,17 +269,29 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
     
     # Main map view with default settings
     route("/") do
+        ACTIVE_SETTINGS[] = default_settings
         serve_map_response(default_settings)
     end
     
     # Topographic map variant
     route("/topo") do
-        serve_map_response(MapSettings(:topo))
+        settings = MapSettings(:topo)
+        ACTIVE_SETTINGS[] = settings
+        serve_map_response(MapSettings(:settings))
     end
     
     # Humanitarian map variant  
     route("/humanitarian") do
-        serve_map_response(MapSettings(:humanitarian))
+        settings = MapSettings(:humanitarian)
+        ACTIVE_SETTINGS[] = settings
+        serve_map_response(MapSettings(:settings))
+    end
+    
+    # Dark map variant  
+    route("/dark") do
+        settings = MapSettings(:dark)
+        ACTIVE_SETTINGS[] = settings
+        serve_map_response(MapSettings(:settings))
     end
 
     # Favicon
