@@ -82,9 +82,11 @@ ArcheoGeneticMap/
 ├── Project.toml              # Package dependencies
 ├── README.md                 # This file
 ├── data/                     # GeoPackage files to serve
+├── config/
+│   ├── map_config.jl         # Map server configuration constants
+│   └── maker_config.jl       # GeoPackage maker column mapping configuration
 ├── src/
 │   ├── ArcheoGeneticMap.jl   # Main module entry point
-│   ├── config.jl             # Configuration constants
 │   ├── types.jl              # Data structures (MapBounds, FilterRequest, etc.)
 │   ├── io.jl                 # GeoPackage reading
 │   ├── geometry.jl           # Spatial calculations
@@ -93,6 +95,7 @@ ArcheoGeneticMap/
 │   ├── analysis.jl           # Statistics and cascading filter options
 │   ├── query.jl              # Query orchestration
 │   ├── server.jl             # Genie routes and API endpoints
+│   ├── gpkg_maker.jl         # GeoPackage maker library (CSV → GPKG pipeline)
 │   └── templates/
 │       ├── templates.jl      # Template loader and JS concatenation
 │       ├── map_base.html     # HTML shell with Alpine.js bindings
@@ -101,22 +104,29 @@ ArcheoGeneticMap/
 │       ├── popup_builder.js  # Popup content builder
 │       └── map_app.js        # Alpine.js controller + Leaflet integration
 ├── bin/
-│   └── run_server.jl         # CLI entry point
+│   ├── run_server.jl         # Map server CLI entry point
+│   └── run_gpkg_maker.jl     # GeoPackage maker CLI entry point
 └── test/
-    └── runtests.jl           # Unit tests
+    ├── runtests.jl               # Map server unit tests
+    ├── test_gpkg_maker.jl        # GeoPackage maker unit tests
+    ├── integration_gpkg_maker.jl # GeoPackage maker integration tests
+    └── fixtures/
+        └── sample.csv            # Synthetic CSV fixture for integration testing
 ```
 
 ### Load Order
 
-**Julia:** `config.jl` → `types.jl` → `io.jl` → `colors.jl` → `geometry.jl` → `analysis.jl` → `filters.jl` → `query.jl` → `templates.jl` → `server.jl`
+**Map server (Julia):** `map_config.jl` → `types.jl` → `io.jl` → `colors.jl` → `geometry.jl` → `analysis.jl` → `filters.jl` → `query.jl` → `templates.jl` → `server.jl`
+
+**GeoPackage maker (Julia):** `maker_config.jl` → `gpkg_maker.jl`
 
 **JavaScript:** `piecewise_scale.js` → `popup_builder.js` → `map_app.js`
 
 ## Configuration
 
-Configuration is centralized in Julia and served to the frontend via `/api/config`.
+Configuration is centralized in the `config/` directory and split by concern.
 
-### Julia Configuration (`config.jl`)
+### Map Server Configuration (`config/map_config.jl`)
 
 ```julia
 # Map display defaults
@@ -134,6 +144,24 @@ DEFAULT_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
 DEFAULT_TILE_ATTRIBUTION = "© OpenStreetMap contributors"
 ```
 
+### GeoPackage Maker Configuration (`config/maker_config.jl`)
+
+Column name candidates are defined here, allowing the maker to handle CSV files
+from different sources without changing pipeline logic. To support a new CSV
+format, add a new `ColumnConfig` entry to `DEFAULT_CONFIGS`:
+
+```julia
+ColumnConfig(
+    ["My Sample Col"],          # sample_id candidates
+    ["My Lat Col"],             # latitude candidates
+    ["My Lon Col"],             # longitude candidates
+    ["My Y-hap Col"],           # y_haplogroup candidates (optional)
+    ["My mtDNA Col"],           # mtdna candidates (optional)
+    ["My Culture Col"],         # culture candidates (optional)
+    ["My Age Col"]              # average_age_calbp candidates (optional)
+)
+```
+
 ### Color Ramps (`colors.jl`)
 
 Color ramps are defined server-side and served to the frontend:
@@ -147,6 +175,34 @@ const COLOR_RAMPS = Dict{String, ColorRamp}(
 ```
 
 To add a new color ramp, add it to `COLOR_RAMPS` in `colors.jl`.
+
+## GeoPackage Maker
+
+Source CSV files must be converted to GeoPackage format before use with the map server. The maker handles CSV files from multiple academic sources by trying a list of known column name variants.
+
+### Usage
+
+```bash
+# Single file
+julia bin/run_gpkg_maker.jl samples.csv
+
+# Single file with explicit output path
+julia bin/run_gpkg_maker.jl samples.csv data/samples.gpkg
+
+# Batch convert a directory of CSV files
+```
+
+### Pipeline
+
+The maker processes CSV files through three stages:
+
+1. `read_csv_with_encoding` — reads the file, retrying with CP1252 encoding on failure
+2. `resolve_columns` — maps CSV column names to canonical fields using `maker_config.jl` candidates
+3. `build_samples` — validates coordinates, parses fields, produces `ArcheoSample` structs
+
+### Adding Support for a New CSV Format
+
+Add a new `ColumnConfig` entry to `DEFAULT_CONFIGS` in `config/maker_config.jl`. Entries are tried in order; the first one that resolves all three required columns (sample ID, latitude, longitude) is used.
 
 ## Customization
 
@@ -197,7 +253,14 @@ println("Available cultures: $(response.meta.available_cultures)")
 ### Running Tests
 
 ```bash
+# Map server unit tests
 julia test/runtests.jl
+
+# GeoPackage maker unit tests
+julia test/test_gpkg_maker.jl
+
+# GeoPackage maker integration tests
+julia test/integration_gpkg_maker.jl
 ```
 
 ### Template Development
@@ -231,16 +294,17 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [x] Centralized configuration files
 - [x] Server-side percentile calculation
 - [x] First major reorganization of code
-- [x] Culture filter and color coding 
+- [x] Culture filter and color coding
 - [x] Second major reorganization (thin client architecture)
 - [x] Cascading filters (cultures update based on date range)
 - [x] Y-haplogroup filter and color coding
 - [x] mtDNA filter and color coding
+- [x] Third major reorganization (config/ directory, gpkg_maker split into src/ and bin/)
 - [ ] integrated geopackage maker
 - [ ] haplotree controls
 - [ ] Docker build and runtime tools
-- [ ] Performance and scalability 
-    - [ ] vector tiles  
+- [ ] Performance and scalability
+    - [ ] vector tiles
     - [ ] dynamic clustering
     - [ ] progressive loading
 - [ ] Refine popups
