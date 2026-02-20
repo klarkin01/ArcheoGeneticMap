@@ -96,7 +96,7 @@
                                     </select>
                                     
                                     <!-- Color ramp preview -->
-                                    <div class="color-ramp-preview" :style="{ background: colorRampGradient() }"></div>
+                                    <div class="color-ramp-preview" :style="{ background: colorRampGradient(colorRamp) }"></div>
                                     <div class="color-ramp-labels">
                                         <span>Older</span>
                                         <span>Younger</span>
@@ -396,6 +396,80 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Y-Haplotree Filter -->
+                <div class="filter-section">
+                    <div class="filter-header" @click="sections.yHaplotree = !sections.yHaplotree">
+                        <span>Y-Haplotree</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.yHaplotree }">&#x25BC;</span>
+                    </div>
+                    <div class="filter-body" x-show="sections.yHaplotree">
+                        <div class="haplogroup-container">
+                            <!-- Search box + Add button -->
+                            <label class="filter-label">Add Haplotree Node (e.g., M269, L51)</label>
+                            <div class="search-input-wrapper">
+                                <input type="text"
+                                       class="search-input"
+                                       x-model="yHaplotreeSearchInput"
+                                       @keydown.enter.prevent="addYHaplotreeTerm()"
+                                       placeholder="Node token, press Enter or click Add">
+                                <button class="search-button" @click="addYHaplotreeTerm()">Add</button>
+                            </div>
+
+                            <!-- Tag list of active terms -->
+                            <div x-show="yHaplotreeTerms.length">
+                                <label class="filter-label">Active Terms</label>
+                                <div class="haplotree-tags">
+                                    <template x-for="term in yHaplotreeTerms" :key="term">
+                                        <span class="haplotree-tag">
+                                            <span x-text="term"></span>
+                                            <button class="haplotree-tag-remove" @click="removeYHaplotreeTerm(term)" title="Remove">&times;</button>
+                                        </span>
+                                    </template>
+                                    <button class="clear-all-button" @click="clearYHaplotreeTerms()">Clear all</button>
+                                </div>
+                            </div>
+
+                            <!-- Color by Y-haplotree controls (only when terms are active) -->
+                            <div class="color-ramp-controls" x-show="yHaplotreeTerms.length" x-transition>
+                                <div class="checkbox-row">
+                                    <input type="checkbox"
+                                        id="colorByYHaplotree"
+                                        :checked="colorBy === 'y_haplotree'"
+                                        @change="onColorByYHaplotreeChange()">
+                                    <label for="colorByYHaplotree">Color by Y-Haplotree term</label>
+                                </div>
+
+                                <div class="color-ramp-options" x-show="colorBy === 'y_haplotree'" x-transition>
+                                    <select class="color-ramp-select"
+                                            x-model="yHaplotreeColorRamp"
+                                            @change="onYHaplotreeColorRampChange()">
+                                        <template x-for="ramp in availableColorRamps" :key="ramp.value">
+                                            <option :value="ramp.value" x-text="ramp.label"></option>
+                                        </template>
+                                    </select>
+
+                                    <div class="color-ramp-preview" :style="{ background: colorRampGradient(yHaplotreeColorRamp) }"></div>
+
+                                    <!-- Legend -->
+                                    <div class="culture-legend">
+                                        <template x-for="item in yHaplotreeLegendItems()" :key="item.name">
+                                            <div class="culture-legend-item">
+                                                <span class="culture-color-swatch"
+                                                    :style="{ backgroundColor: item.color }"></span>
+                                                <span class="culture-legend-label" x-text="item.name"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="stats">
+                                <span x-text="yHaplotreeTerms.length"></span> terms active
+                            </div>
+                        </div>
+                    </div>
+                    </div>
             </div>
             
             <div class="sidebar-footer">

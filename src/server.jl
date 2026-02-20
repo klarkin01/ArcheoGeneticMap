@@ -104,7 +104,12 @@ function parse_filter_request(payload::Dict)
     selected_mtdna_raw = get(payload, "selectedMtdna", [])
     selected_mtdna = String[string(s) for s in selected_mtdna_raw]
     mtdna_filter = HaplogroupFilter(mtdna_search_text, selected_mtdna)
-    
+
+    # Parse Y-haplotree filter
+    y_haplotree_terms_raw = get(payload, "yHaplotreeTerms", [])
+    y_haplotree_terms = String[string(s) for s in y_haplotree_terms_raw]
+    y_haplotree_filter = YHaplotreeFilter(y_haplotree_terms)
+
     # Parse color settings
     color_by_str = get(payload, "colorBy", nothing)
     color_by = if color_by_str === nothing || color_by_str == ""
@@ -112,12 +117,13 @@ function parse_filter_request(payload::Dict)
     else
         Symbol(color_by_str)
     end
-    
+
     color_ramp = get(payload, "colorRamp", "viridis")
     culture_color_ramp = get(payload, "cultureColorRamp", "viridis")
     y_haplogroup_color_ramp = get(payload, "yHaplogroupColorRamp", "viridis")
     mtdna_color_ramp = get(payload, "mtdnaColorRamp", "viridis")
-    
+    y_haplotree_color_ramp = get(payload, "yHaplotreeColorRamp", "viridis")
+
     return FilterRequest(
         date_min = date_min,
         date_max = date_max,
@@ -128,11 +134,13 @@ function parse_filter_request(payload::Dict)
         include_no_y_haplogroup = include_no_y_haplogroup,
         mtdna_filter = mtdna_filter,
         include_no_mtdna = include_no_mtdna,
+        y_haplotree_filter = y_haplotree_filter,
         color_by = color_by,
         color_ramp = color_ramp,
         culture_color_ramp = culture_color_ramp,
         y_haplogroup_color_ramp = y_haplogroup_color_ramp,
-        mtdna_color_ramp = mtdna_color_ramp
+        mtdna_color_ramp = mtdna_color_ramp,
+        y_haplotree_color_ramp = y_haplotree_color_ramp
     )
 end
 
@@ -173,6 +181,10 @@ function query_response_to_dict(response::QueryResponse)
             "mtdnaLegend" => [
                 Dict("name" => name, "color" => color)
                 for (name, color) in response.meta.mtdna_legend
+            ],
+            "yHaplotreeLegend" => [
+                Dict("name" => name, "color" => color)
+                for (name, color) in response.meta.y_haplotree_legend
             ]
         )
     )
@@ -219,6 +231,7 @@ function build_config_response()
             "cultureColorRamp" => "viridis",
             "yHaplogroupColorRamp" => "viridis",
             "mtdnaColorRamp" => "viridis",
+            "yHaplotreeColorRamp" => "viridis",
             "pointColor" => DEFAULT_POINT_COLOR,
             "pointRadius" => DEFAULT_POINT_RADIUS
         ),

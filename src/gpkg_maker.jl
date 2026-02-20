@@ -18,6 +18,7 @@ struct ArcheoSample
     mtdna::String
     culture::String
     average_age_calbp::Union{Float64, Missing}
+    y_haplotree::String
 end
 
 """
@@ -72,6 +73,7 @@ function resolve_columns(df::DataFrame)
     mtdna_col        = nothing
     culture_col      = nothing
     average_age_col  = nothing
+    y_haplotree_col  = nothing
 
     for config in DEFAULT_CONFIGS
         sample_id_col    = find_column(df, config.sample_id_cols)
@@ -81,6 +83,7 @@ function resolve_columns(df::DataFrame)
         mtdna_col        = find_column(df, config.mtdna_cols)
         culture_col      = find_column(df, config.culture_cols)
         average_age_col  = find_column(df, config.average_age_cols)
+        y_haplotree_col  = find_column(df, config.y_haplotree_cols)
 
         if !isnothing(sample_id_col) && !isnothing(latitude_col) && !isnothing(longitude_col)
             break
@@ -98,7 +101,8 @@ function resolve_columns(df::DataFrame)
         y_haplogroup = y_haplogroup_col,
         mtdna        = mtdna_col,
         culture      = culture_col,
-        average_age  = average_age_col
+        average_age  = average_age_col,
+        y_haplotree  = y_haplotree_col
     )
 
     println("Using columns:")
@@ -109,6 +113,7 @@ function resolve_columns(df::DataFrame)
     println("  mtDNA:        $(cols.mtdna)")
     println("  Culture:      $(cols.culture)")
     println("  Average age:  $(cols.average_age)")
+    println("  Y haplotree:  $(cols.y_haplotree)")
 
     return cols
 end
@@ -138,6 +143,7 @@ function build_samples(df::DataFrame, cols)::Vector{ArcheoSample}
             y_hap   = isnothing(cols.y_haplogroup) || ismissing(row[cols.y_haplogroup]) ? "" : string(row[cols.y_haplogroup])
             mtdna   = isnothing(cols.mtdna)        || ismissing(row[cols.mtdna])        ? "" : string(row[cols.mtdna])
             culture = isnothing(cols.culture)      || ismissing(row[cols.culture])      ? "" : string(row[cols.culture])
+            y_haplotree = isnothing(cols.y_haplotree) || ismissing(row[cols.y_haplotree]) ? "" : string(row[cols.y_haplotree])
 
             avg_age = missing
             if !isnothing(cols.average_age) && !ismissing(row[cols.average_age])
@@ -153,7 +159,8 @@ function build_samples(df::DataFrame, cols)::Vector{ArcheoSample}
                 string(row[cols.sample_id]),
                 lat, lon,
                 y_hap, mtdna, culture,
-                avg_age
+                avg_age,
+                y_haplotree
             ))
             sample_counter += 1
 
@@ -194,6 +201,7 @@ function samples_to_geodataframe(samples::Vector{ArcheoSample})
         mtdna             = [s.mtdna             for s in samples],
         culture           = [s.culture           for s in samples],
         average_age_calbp = [s.average_age_calbp for s in samples],
+        y_haplotree       = [s.y_haplotree       for s in samples],
         geometry          = geometries
     )
 end

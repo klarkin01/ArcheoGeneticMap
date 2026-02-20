@@ -9,7 +9,7 @@ Core data structures for archaeological map visualization.
 #       DEFAULT_TILE_URL, DEFAULT_TILE_ATTRIBUTION
 
 export MapBounds, MapSettings, MapConfig, DateStatistics, CultureStatistics, TilePreset, TILE_PRESETS
-export ColorRamp, CultureFilter, HaplogroupFilter, FilterRequest, FilterMeta, QueryResponse
+export ColorRamp, CultureFilter, HaplogroupFilter, YHaplotreeFilter, FilterRequest, FilterMeta, QueryResponse
 
 """
     MapBounds
@@ -216,6 +216,28 @@ end
 HaplogroupFilter() = HaplogroupFilter("", String[])
 
 """
+    YHaplotreeFilter
+
+Specifies Y-haplotree filtering by a list of token strings.
+
+Each token is matched against the haplotree path (e.g. "R-M207>M173>M343>...")
+by splitting on '>' and comparing each node token case-insensitively.
+A sample passes if ANY token in `terms` exactly matches ANY node in its path.
+
+# Fields
+- `terms`: Vector of node strings to match (empty = no filter applied)
+
+When active (non-empty terms), this filter is mutually exclusive with the
+y_haplogroup filter — only one should be active at a time.
+"""
+struct YHaplotreeFilter
+    terms::Vector{String}
+end
+
+# Default constructor
+YHaplotreeFilter() = YHaplotreeFilter(String[])
+
+"""
     FilterRequest
 
 Represents a filter request from the frontend.
@@ -227,15 +249,17 @@ All filter fields are optional - nothing means "no filter applied".
 - `include_undated`: Whether to include samples without dates
 - `culture_filter`: Culture filter specification
 - `include_no_culture`: Whether to include samples without culture data
-- `y_haplogroup_filter`: Y-haplogroup filter specification
+- `y_haplogroup_filter`: Y-haplogroup filter specification (mutually exclusive with y_haplotree_filter)
 - `include_no_y_haplogroup`: Whether to include samples without Y-haplogroup
 - `mtdna_filter`: mtDNA haplogroup filter specification
 - `include_no_mtdna`: Whether to include samples without mtDNA
-- `color_by`: How to color markers (:age, :culture, :y_haplogroup, :mtdna, or nothing)
+- `y_haplotree_filter`: Y-haplotree token filter (mutually exclusive with y_haplogroup_filter)
+- `color_by`: How to color markers (:age, :culture, :y_haplogroup, :mtdna, :y_haplotree, or nothing)
 - `color_ramp`: Name of color ramp to use for age coloring (e.g., "viridis")
 - `culture_color_ramp`: Name of color ramp to use for culture coloring
 - `y_haplogroup_color_ramp`: Name of color ramp to use for Y-haplogroup coloring
 - `mtdna_color_ramp`: Name of color ramp to use for mtDNA coloring
+- `y_haplotree_color_ramp`: Name of color ramp to use for Y-haplotree coloring
 """
 struct FilterRequest
     date_min::Union{Float64, Nothing}
@@ -247,11 +271,13 @@ struct FilterRequest
     include_no_y_haplogroup::Bool
     mtdna_filter::HaplogroupFilter
     include_no_mtdna::Bool
+    y_haplotree_filter::YHaplotreeFilter
     color_by::Union{Symbol, Nothing}
     color_ramp::String
     culture_color_ramp::String
     y_haplogroup_color_ramp::String
     mtdna_color_ramp::String
+    y_haplotree_color_ramp::String
 end
 
 # Default constructor with sensible defaults
@@ -265,19 +291,23 @@ function FilterRequest(;
     include_no_y_haplogroup::Bool = true,
     mtdna_filter::HaplogroupFilter = HaplogroupFilter(),
     include_no_mtdna::Bool = true,
+    y_haplotree_filter::YHaplotreeFilter = YHaplotreeFilter(),
     color_by::Union{Symbol, Nothing} = nothing,
     color_ramp::String = "viridis",
     culture_color_ramp::String = "viridis",
     y_haplogroup_color_ramp::String = "viridis",
-    mtdna_color_ramp::String = "viridis"
+    mtdna_color_ramp::String = "viridis",
+    y_haplotree_color_ramp::String = "viridis"
 )
     FilterRequest(
         date_min, date_max, include_undated,
         culture_filter, include_no_culture,
         y_haplogroup_filter, include_no_y_haplogroup,
         mtdna_filter, include_no_mtdna,
+        y_haplotree_filter,
         color_by, color_ramp,
-        culture_color_ramp, y_haplogroup_color_ramp, mtdna_color_ramp
+        culture_color_ramp, y_haplogroup_color_ramp, mtdna_color_ramp,
+        y_haplotree_color_ramp
     )
 end
 
@@ -300,6 +330,7 @@ This drives what the UI can display for cascading filters.
 - `culture_legend`: Vector of (culture_name, color) pairs for legend display
 - `y_haplogroup_legend`: Vector of (haplogroup, color) pairs for legend display
 - `mtdna_legend`: Vector of (haplogroup, color) pairs for legend display
+- `y_haplotree_legend`: Vector of (term, color) pairs for legend display
 """
 struct FilterMeta
     total_count::Int
@@ -314,6 +345,7 @@ struct FilterMeta
     culture_legend::Vector{Tuple{String, String}}
     y_haplogroup_legend::Vector{Tuple{String, String}}
     mtdna_legend::Vector{Tuple{String, String}}
+    y_haplotree_legend::Vector{Tuple{String, String}}
 end
 
 """

@@ -6,7 +6,7 @@ This is the single source of truth for color configuration.
 """
 
 export COLOR_RAMPS, CULTURE_PALETTE
-export interpolate_color, color_for_age, color_for_culture, color_for_haplogroup
+export interpolate_color, color_for_age, color_for_culture, color_for_haplogroup, color_for_y_haplotree_term
 export hex_to_rgb, rgb_to_hex
 
 # =============================================================================
@@ -252,6 +252,40 @@ function color_for_haplogroup(haplogroup, selected_haplogroups::Vector{String}, 
     end
     
     return interpolate_color(ramp_name, t)
+end
+
+"""
+    color_for_y_haplotree_term(path, terms::Vector{String}, ramp_name::String) -> String
+
+Get color for a sample's Y-haplotree path based on which term from `terms` first
+matches a node in the path (first-match-wins, case-insensitive token comparison).
+
+Returns `default_color` when:
+- path is nothing/missing/empty
+- terms is empty
+- no term matches any node in the path
+"""
+function color_for_y_haplotree_term(path, terms::Vector{String}, ramp_name::String;
+                                    default_color::String = "#808080")
+    if path === nothing || ismissing(path) || path == ""
+        return default_color
+    end
+
+    if isempty(terms)
+        return default_color
+    end
+
+    tokens = Set(lowercase(strip(tok)) for tok in split(string(path), '>'))
+    n = length(terms)
+
+    for (idx, term) in enumerate(terms)
+        if lowercase(term) in tokens
+            t = n == 1 ? 0.5 : (idx - 1) / (n - 1)
+            return interpolate_color(ramp_name, t)
+        end
+    end
+
+    return default_color
 end
 
 """

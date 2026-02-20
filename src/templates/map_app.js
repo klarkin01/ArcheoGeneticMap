@@ -129,7 +129,8 @@ function filterController() {
             dateRange: false,
             culture: false,
             yHaplogroup: false,
-            mtdna: false
+            mtdna: false,
+            yHaplotree: false
         },
         
         // ---------------------------------------------------------------------
@@ -152,7 +153,8 @@ function filterController() {
             dateStatistics: { min: 0, max: 50000, p2: 0, p98: 50000 },
             cultureLegend: [],
             yHaplogroupLegend: [],
-            mtdnaLegend: []
+            mtdnaLegend: [],
+            yHaplotreeLegend: []
         },
         
         // ---------------------------------------------------------------------
@@ -177,9 +179,14 @@ function filterController() {
         // mtDNA filter state
         selectedMtdna: [],
         mtdnaSearchText: '',
+
+        // Y-haplotree filter state
+        yHaplotreeTerms: [],       // confirmed search terms (tag list)
+        yHaplotreeSearchInput: '', // current text in the search box
+        yHaplotreeColorRamp: 'viridis',
         
         // Color settings
-        colorBy: null,  // null, 'age', 'culture', 'y_haplogroup', 'mtdna'
+        colorBy: null,  // null, 'age', 'culture', 'y_haplogroup', 'mtdna', 'y_haplotree'
         colorRamp: 'viridis',
         cultureColorRamp: 'viridis',
         yHaplogroupColorRamp: 'viridis',
@@ -231,10 +238,14 @@ function filterController() {
         
         get availableColorRamps() {
             if (!this.config) return [];
-            return Object.entries(this.config.colorRamps).map(([value, ramp]) => ({
-                value,
-                label: ramp.label
-            }));
+            const defaultRamp = this.config.defaults?.colorRamp || 'viridis';
+            return Object.entries(this.config.colorRamps)
+                .map(([value, ramp]) => ({ value, label: ramp.label }))
+                .sort((a, b) => {
+                    if (a.value === defaultRamp) return -1;
+                    if (b.value === defaultRamp) return 1;
+                    return a.label.localeCompare(b.label);
+                });
         },
         
         // ---------------------------------------------------------------------
@@ -288,6 +299,7 @@ function filterController() {
                 this.cultureColorRamp = this.config.defaults.cultureColorRamp;
                 this.yHaplogroupColorRamp = this.config.defaults.yHaplogroupColorRamp;
                 this.mtdnaColorRamp = this.config.defaults.mtdnaColorRamp;
+                this.yHaplotreeColorRamp = this.config.defaults.yHaplotreeColorRamp || 'viridis';
                 
                 // Fetch initial data
                 await this.applyFilters();
@@ -319,11 +331,13 @@ function filterController() {
                 mtdnaSearchText: this.mtdnaSearchText,
                 selectedMtdna: this.selectedMtdna,
                 includeNoMtdna: this.filters.includeNoMtdna,
+                yHaplotreeTerms: this.yHaplotreeTerms,
                 colorBy: this.colorBy,
                 colorRamp: this.colorRamp,
                 cultureColorRamp: this.cultureColorRamp,
                 yHaplogroupColorRamp: this.yHaplogroupColorRamp,
-                mtdnaColorRamp: this.mtdnaColorRamp
+                mtdnaColorRamp: this.mtdnaColorRamp,
+                yHaplotreeColorRamp: this.yHaplotreeColorRamp
             };
         },
         
@@ -423,6 +437,10 @@ function filterController() {
             // Reset mtDNA selection to all
             this.selectedMtdna = [...this.config.allMtdna];
             this.mtdnaSearchText = '';
+
+            // Reset Y-haplotree filter
+            this.yHaplotreeTerms = [];
+            this.yHaplotreeSearchInput = '';
             
             // Reset include flags to defaults
             this.filters.includeUndated = this.config.defaults.includeUndated;
@@ -436,6 +454,7 @@ function filterController() {
             this.cultureColorRamp = this.config.defaults.cultureColorRamp;
             this.yHaplogroupColorRamp = this.config.defaults.yHaplogroupColorRamp;
             this.mtdnaColorRamp = this.config.defaults.mtdnaColorRamp;
+            this.yHaplotreeColorRamp = this.config.defaults.yHaplotreeColorRamp || 'viridis';
             
             // Apply the reset filters
             this.applyFilters();
@@ -629,6 +648,12 @@ function filterController() {
          * Toggle a single Y-haplogroup selection
          */
         toggleYHaplogroup(haplogroup) {
+            // Mutual exclusivity: clear y_haplotree filter
+            if (this.yHaplotreeTerms.length > 0) {
+                this.yHaplotreeTerms = [];
+                this.yHaplotreeSearchInput = '';
+                if (this.colorBy === 'y_haplotree') this.colorBy = null;
+            }
             const index = this.selectedYHaplogroups.indexOf(haplogroup);
             if (index === -1) {
                 this.selectedYHaplogroups.push(haplogroup);
@@ -642,6 +667,12 @@ function filterController() {
          * Toggle all Y-haplogroups on/off
          */
         toggleAllYHaplogroups() {
+            // Mutual exclusivity: clear y_haplotree filter
+            if (this.yHaplotreeTerms.length > 0) {
+                this.yHaplotreeTerms = [];
+                this.yHaplotreeSearchInput = '';
+                if (this.colorBy === 'y_haplotree') this.colorBy = null;
+            }
             if (this.allYHaplogroupsSelected) {
                 this.selectedYHaplogroups = [];
             } else {
@@ -784,6 +815,94 @@ function filterController() {
             }
         },
         
+        // ---------------------------------------------------------------------
+        // Y-Haplotree Filter Methods
+        // ---------------------------------------------------------------------
+
+        /**
+         * Add the current search input as a term to the filter list.
+         * Clears y_haplogroup filter (mutual exclusivity).
+         * No-ops if the term is empty or already in the list.
+         */
+        addYHaplotreeTerm() {
+            const term = this.yHaplotreeSearchInput.trim();
+            if (!term || this.yHaplotreeTerms.includes(term)) {
+                this.yHaplotreeSearchInput = '';
+                return;
+            }
+            // Mutual exclusivity: clear y_haplogroup filter
+            this.selectedYHaplogroups = [...(this.config ? this.config.allYHaplogroups : [])];
+            if (this.colorBy === 'y_haplogroup') this.colorBy = null;
+
+            this.yHaplotreeTerms.push(term);
+            this.yHaplotreeSearchInput = '';
+            this.applyFilters();
+        },
+
+        /**
+         * Handle Enter key in the y_haplotree search box
+         * Note: @keydown.enter.prevent in the template calls addYHaplotreeTerm() directly.
+         * This method is kept for completeness but is no longer wired to the template.
+         */
+        onYHaplotreeSearchKeydown(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                this.addYHaplotreeTerm();
+            }
+        },
+
+        /**
+         * Remove a single term from the filter list
+         */
+        removeYHaplotreeTerm(term) {
+            const idx = this.yHaplotreeTerms.indexOf(term);
+            if (idx !== -1) {
+                this.yHaplotreeTerms.splice(idx, 1);
+            }
+            if (this.yHaplotreeTerms.length === 0 && this.colorBy === 'y_haplotree') {
+                this.colorBy = null;
+            }
+            this.applyFilters();
+        },
+
+        /**
+         * Clear all y_haplotree terms
+         */
+        clearYHaplotreeTerms() {
+            this.yHaplotreeTerms = [];
+            this.yHaplotreeSearchInput = '';
+            if (this.colorBy === 'y_haplotree') this.colorBy = null;
+            this.applyFilters();
+        },
+
+        /**
+         * Get legend items for y_haplotree coloring
+         */
+        yHaplotreeLegendItems() {
+            return this.meta.yHaplotreeLegend || [];
+        },
+
+        /**
+         * Handle color by y_haplotree toggle
+         */
+        onColorByYHaplotreeChange() {
+            if (this.colorBy === 'y_haplotree') {
+                this.colorBy = null;
+            } else {
+                this.colorBy = 'y_haplotree';
+            }
+            this.applyFilters();
+        },
+
+        /**
+         * Handle y_haplotree color ramp selection change
+         */
+        onYHaplotreeColorRampChange() {
+            if (this.colorBy === 'y_haplotree') {
+                this.applyFilters();
+            }
+        },
+
         // ---------------------------------------------------------------------
         // Color Ramp Utilities
         // ---------------------------------------------------------------------

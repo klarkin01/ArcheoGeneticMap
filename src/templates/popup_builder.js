@@ -55,6 +55,10 @@ const PopupBuilder = (function() {
         { 
             key: 'mtdna', 
             label: 'mtDNA' 
+        },
+        {
+            key: 'y_haplotree',
+            label: 'Y Haplotree'
         }
     ];
     

@@ -62,6 +62,14 @@ function assign_colors!(features::Vector,
                 request.mtdna_color_ramp,
                 default_color = default_color
             )
+        elseif color_by == :y_haplotree
+            path = get(props, "y_haplotree", nothing)
+            props["_color"] = color_for_y_haplotree_term(
+                path,
+                request.y_haplotree_filter.terms,
+                request.y_haplotree_color_ramp,
+                default_color = default_color
+            )
         else
             # No coloring - use default
             props["_color"] = default_color
