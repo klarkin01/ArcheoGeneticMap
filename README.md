@@ -129,6 +129,7 @@ ArcheoGeneticMap/
 │       ├── templates.jl      # Template loader and JS concatenation
 │       ├── map_base.html     # HTML shell with Alpine.js bindings
 │       ├── map_styles.css    # All CSS styling
+│       ├── favicon.ico       # super awesome branding
 │       ├── piecewise_scale.js # Slider scale with outlier compression
 │       ├── popup_builder.js  # Popup content builder
 │       └── map_app.js        # Alpine.js controller + Leaflet integration
@@ -337,6 +338,20 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [x] Y-haplotree token filter (node-level matching against full haplotree path)
 - [x] Color by Y-haplotree term
 - [x] GeoPackage maker integrated into repository (standalone process)
+- [ ] Study
+    - [ ] filter
+    - [ ] gpkg_maker
+    - [ ] pop-up
+- [ ] 14C Method
+    - [ ] filter
+    - [ ] gpkg_maker
+    - [ ] pop-up
+- [ ] Full date
+    - [ ] gpkg_maker
+    - [ ] pop-up
+- [ ] SNP Count
+    - [ ] gpkg_maker
+    - [ ] pop-up
 - [ ] Docker build and runtime tools
 - [ ] Performance and scalability
     - [ ] vector tiles
