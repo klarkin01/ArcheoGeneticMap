@@ -8,6 +8,7 @@ so this module only assembles HTML, CSS, and JS without injecting config.
 """
 
 using JSON3
+using Base64
 
 export render_map_html, clear_template_cache
 
@@ -99,14 +100,17 @@ function render_map_html(config::MapConfig)
     # Load template components
     html_template = load_template("map_base.html")
     css_content = load_template("map_styles.css")
-    
+    favicon_bytes = read(joinpath(template_dir(), "favicon.ico"))
+    favicon_b64 = base64encode(favicon_bytes)
+
     # Load and concatenate JavaScript modules
     js_content = load_javascript_modules()
     
     # Assemble the final HTML (no config injection needed)
     html = replace(html_template,
         "{{STYLES}}" => css_content,
-        "{{SCRIPTS}}" => js_content
+        "{{SCRIPTS}}" => js_content,
+        "{{FAVICON}}" => favicon_b64
     )
     
     return html
@@ -122,6 +126,8 @@ function render_map_html()
     # Load template components
     html_template = load_template("map_base.html")
     css_content = load_template("map_styles.css")
+    favicon_bytes = read(joinpath(template_dir(), "favicon.ico"))
+    favicon_b64 = base64encode(favicon_bytes)
     
     # Load and concatenate JavaScript modules
     js_content = load_javascript_modules()
@@ -129,7 +135,8 @@ function render_map_html()
     # Assemble the final HTML
     html = replace(html_template,
         "{{STYLES}}" => css_content,
-        "{{SCRIPTS}}" => js_content
+        "{{SCRIPTS}}" => js_content,
+        "{{FAVICON}}" => favicon_b64
     )
     
     return html

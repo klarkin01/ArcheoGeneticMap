@@ -293,22 +293,6 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
         ACTIVE_SETTINGS[] = settings
         serve_map_response(MapSettings(:settings))
     end
-
-    # Favicon
-    route("/favicon.ico", method = GET) do
-        setheaders(Dict("Content-Type" => "image/svg+xml"))
-        """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-            <rect x="14" y="20" width="4" height="10" fill="#654321"/>
-            <circle cx="16" cy="12" r="8" fill="#2d5016"/>
-            <circle cx="11" cy="14" r="6" fill="#2d5016"/>
-            <circle cx="21" cy="14" r="6" fill="#2d5016"/>
-            <circle cx="13" cy="18" r="5" fill="#2d5016"/>
-            <circle cx="19" cy="18" r="5" fill="#2d5016"/>
-            <circle cx="16" cy="11" r="6" fill="#3d6d1f"/>
-            <circle cx="12" cy="13" r="4" fill="#3d6d1f"/>
-            <circle cx="20" cy="13" r="4" fill="#3d6d1f"/>
-        </svg>"""
-    end
     
     # Configuration endpoint
     route("/api/config") do
