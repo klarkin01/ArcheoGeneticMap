@@ -110,6 +110,7 @@ Response includes:
 ArcheoGeneticMap/
 ├── Project.toml              # Package dependencies
 ├── README.md                 # This file
+├── LICENSE                   # boilerplate MIT License file
 ├── data/                     # GeoPackage files to serve
 ├── config/
 │   ├── map_config.jl         # Map server configuration constants
