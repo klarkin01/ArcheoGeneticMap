@@ -1,8 +1,9 @@
 [project]
 name = "ArcheoGeneticMap"
 uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-authors = ["Kyle"]
+authors = ["Kyle Larkin"]
 version = "0.1.0"
+license = "MIT"
 
 [deps]
 ArchGDAL = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
