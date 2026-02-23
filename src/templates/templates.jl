@@ -60,6 +60,7 @@ end
 const JS_MODULES = [
     "piecewise_scale.js",  # Slider scaling (uses config from server)
     "popup_builder.js",    # Popup HTML generation
+    "spiderifier.js",      # Overlapping marker spiderfication
     "map_app.js"           # Main application
 ]
 
