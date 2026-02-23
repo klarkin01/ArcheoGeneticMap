@@ -341,6 +341,7 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [x] Color by Y-haplotree term
 - [x] GeoPackage maker integrated into repository (standalone process)
 - [x] Fourth refactor - DRY audit
+- [x] Handle (explode) overlapping samples
 - [ ] Study
     - [ ] filter
     - [ ] gpkg_maker
