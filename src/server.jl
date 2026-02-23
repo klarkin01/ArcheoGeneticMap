@@ -100,13 +100,13 @@ function parse_filter_request(payload::Dict)
     y_search_text = get(payload, "yHaplogroupSearchText", "")
     selected_y_haplogroups_raw = get(payload, "selectedYHaplogroups", [])
     selected_y_haplogroups = String[string(s) for s in selected_y_haplogroups_raw]
-    y_haplogroup_filter = HaplogroupFilter(y_search_text, selected_y_haplogroups)
+    y_haplogroup_filter = YHaplogroupFilter(y_search_text, selected_y_haplogroups)
     
     # Parse mtDNA filter
     mtdna_search_text = get(payload, "mtdnaSearchText", "")
     selected_mtdna_raw = get(payload, "selectedMtdna", [])
     selected_mtdna = String[string(s) for s in selected_mtdna_raw]
-    mtdna_filter = HaplogroupFilter(mtdna_search_text, selected_mtdna)
+    mtdna_filter = MtdnaFilter(mtdna_search_text, selected_mtdna)
 
     # Parse Y-haplotree filter
     y_haplotree_terms_raw = get(payload, "yHaplotreeTerms", [])
@@ -121,11 +121,11 @@ function parse_filter_request(payload::Dict)
         Symbol(color_by_str)
     end
 
-    color_ramp = get(payload, "colorRamp", "viridis")
-    culture_color_ramp = get(payload, "cultureColorRamp", "viridis")
-    y_haplogroup_color_ramp = get(payload, "yHaplogroupColorRamp", "viridis")
-    mtdna_color_ramp = get(payload, "mtdnaColorRamp", "viridis")
-    y_haplotree_color_ramp = get(payload, "yHaplotreeColorRamp", "viridis")
+    color_ramp = get(payload, "colorRamp", DEFAULT_COLOR_RAMP)
+    culture_color_ramp = get(payload, "cultureColorRamp", DEFAULT_COLOR_RAMP)
+    y_haplogroup_color_ramp = get(payload, "yHaplogroupColorRamp", DEFAULT_COLOR_RAMP)
+    mtdna_color_ramp = get(payload, "mtdnaColorRamp", DEFAULT_COLOR_RAMP)
+    y_haplotree_color_ramp = get(payload, "yHaplotreeColorRamp", DEFAULT_COLOR_RAMP)
 
     return FilterRequest(
         date_min = date_min,
@@ -230,11 +230,11 @@ function build_config_response()
             "includeNoCulture" => true,
             "includeNoYHaplogroup" => true,
             "includeNoMtdna" => true,
-            "colorRamp" => "viridis",
-            "cultureColorRamp" => "viridis",
-            "yHaplogroupColorRamp" => "viridis",
-            "mtdnaColorRamp" => "viridis",
-            "yHaplotreeColorRamp" => "viridis",
+            "colorRamp" => DEFAULT_COLOR_RAMP,
+            "cultureColorRamp" => DEFAULT_COLOR_RAMP,
+            "yHaplogroupColorRamp" => DEFAULT_COLOR_RAMP,
+            "mtdnaColorRamp" => DEFAULT_COLOR_RAMP,
+            "yHaplotreeColorRamp" => DEFAULT_COLOR_RAMP,
             "pointColor" => DEFAULT_POINT_COLOR,
             "pointRadius" => DEFAULT_POINT_RADIUS
         ),
@@ -277,21 +277,21 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
     route("/topo") do
         settings = MapSettings(:topo)
         ACTIVE_SETTINGS[] = settings
-        serve_map_response(MapSettings(:settings))
+        serve_map_response(settings)
     end
     
     # Humanitarian map variant  
     route("/humanitarian") do
         settings = MapSettings(:humanitarian)
         ACTIVE_SETTINGS[] = settings
-        serve_map_response(MapSettings(:settings))
+        serve_map_response(settings)
     end
     
     # Dark map variant  
     route("/dark") do
         settings = MapSettings(:dark)
         ACTIVE_SETTINGS[] = settings
-        serve_map_response(MapSettings(:settings))
+        serve_map_response(settings)
     end
     
     # Configuration endpoint

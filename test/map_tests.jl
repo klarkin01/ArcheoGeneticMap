@@ -262,7 +262,7 @@ using .ArcheoGeneticMap
         ]
         # y_haplotree_filter active → y_haplogroup_filter should be ignored
         req = FilterRequest(
-            y_haplogroup_filter = HaplogroupFilter("", ["R1b"]),
+            y_haplogroup_filter = YHaplogroupFilter("", ["R1b"]),
             include_no_y_haplogroup = false,
             y_haplotree_filter = YHaplotreeFilter(["M223"])
         )

@@ -6,7 +6,7 @@ This is the single source of truth for color configuration.
 """
 
 export COLOR_RAMPS, CULTURE_PALETTE
-export interpolate_color, color_for_age, color_for_culture, color_for_haplogroup, color_for_y_haplotree_term
+export interpolate_color, color_for_age, color_for_category, color_for_culture, color_for_haplogroup, color_for_y_haplotree_term
 export hex_to_rgb, rgb_to_hex
 
 # =============================================================================
@@ -172,7 +172,7 @@ Returns default color for missing/nothing age values.
 """
 function color_for_age(age, date_min::Float64, date_max::Float64, ramp_name::String;
                        default_color::String = "#808080")
-    if age === nothing || ismissing(age)
+    if is_missing_value(age)
         return default_color
     end
     
@@ -187,72 +187,60 @@ function color_for_age(age, date_min::Float64, date_max::Float64, ramp_name::Str
 end
 
 """
-    color_for_culture(culture, selected_cultures::Vector{String}, ramp_name::String) -> String
+    color_for_category(value, categories::Vector{String}, ramp_name::String) -> String
 
-Get color for a culture based on its position in the selected cultures list.
-Uses sequential color ramp interpolation.
+Get a color for any categorical value based on its position in an ordered list.
+Uses sequential color ramp interpolation: first item → t=0, last → t=1, single
+item → t=0.5 (center of ramp).
 
-Returns default color for missing/nothing culture values or cultures not in the selected list.
+Returns `default_color` when:
+- `value` is nothing, missing, or empty string
+- `categories` is empty
+- `value` is not found in `categories`
+
+This is the single implementation underlying `color_for_culture` and
+`color_for_haplogroup`. Use it directly for new categorical color modes,
+or add a named wrapper if call-site clarity is important.
 """
-function color_for_culture(culture, selected_cultures::Vector{String}, ramp_name::String;
-                           default_color::String = "#808080")
-    if culture === nothing || ismissing(culture) || culture == ""
+function color_for_category(value, categories::Vector{String}, ramp_name::String;
+                            default_color::String = "#808080")
+    if is_missing_value(value)
         return default_color
     end
-    
-    if isempty(selected_cultures)
+
+    if isempty(categories)
         return default_color
     end
-    
-    idx = findfirst(==(culture), selected_cultures)
+
+    idx = findfirst(==(value), categories)
     if idx === nothing
         return default_color
     end
-    
-    # Map index to [0, 1] range for color ramp interpolation
-    n = length(selected_cultures)
-    if n == 1
-        t = 0.5  # Center of ramp for single item
-    else
-        t = (idx - 1) / (n - 1)
-    end
-    
+
+    n = length(categories)
+    t = n == 1 ? 0.5 : (idx - 1) / (n - 1)
+
     return interpolate_color(ramp_name, t)
 end
+
+# Named wrappers — preserve the stable public API used in query.jl and analysis.jl.
+"""
+    color_for_culture(culture, selected_cultures::Vector{String}, ramp_name::String) -> String
+
+Get color for a culture. Delegates to `color_for_category`.
+"""
+color_for_culture(culture, selected_cultures::Vector{String}, ramp_name::String;
+                  default_color::String = "#808080") =
+    color_for_category(culture, selected_cultures, ramp_name; default_color)
 
 """
     color_for_haplogroup(haplogroup, selected_haplogroups::Vector{String}, ramp_name::String) -> String
 
-Get color for a haplogroup based on its position in the selected haplogroups list.
-Uses sequential color ramp interpolation.
-
-Returns default color for missing/nothing haplogroup values or haplogroups not in the selected list.
+Get color for a haplogroup. Delegates to `color_for_category`.
 """
-function color_for_haplogroup(haplogroup, selected_haplogroups::Vector{String}, ramp_name::String;
-                             default_color::String = "#808080")
-    if haplogroup === nothing || ismissing(haplogroup) || haplogroup == ""
-        return default_color
-    end
-    
-    if isempty(selected_haplogroups)
-        return default_color
-    end
-    
-    idx = findfirst(==(haplogroup), selected_haplogroups)
-    if idx === nothing
-        return default_color
-    end
-    
-    # Map index to [0, 1] range for color ramp interpolation
-    n = length(selected_haplogroups)
-    if n == 1
-        t = 0.5  # Center of ramp for single item
-    else
-        t = (idx - 1) / (n - 1)
-    end
-    
-    return interpolate_color(ramp_name, t)
-end
+color_for_haplogroup(haplogroup, selected_haplogroups::Vector{String}, ramp_name::String;
+                     default_color::String = "#808080") =
+    color_for_category(haplogroup, selected_haplogroups, ramp_name; default_color)
 
 """
     color_for_y_haplotree_term(path, terms::Vector{String}, ramp_name::String) -> String
@@ -267,7 +255,7 @@ Returns `default_color` when:
 """
 function color_for_y_haplotree_term(path, terms::Vector{String}, ramp_name::String;
                                     default_color::String = "#808080")
-    if path === nothing || ismissing(path) || path == ""
+    if is_missing_value(path)
         return default_color
     end
 
