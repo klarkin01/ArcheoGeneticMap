@@ -133,6 +133,7 @@ ArcheoGeneticMap/
 │       ├── favicon.ico       # super awesome branding
 │       ├── piecewise_scale.js # Slider scale with outlier compression
 │       ├── popup_builder.js  # Popup content builder
+│       ├── spiderify.js      # Handles overlapping samples
 │       └── map_app.js        # Alpine.js controller + Leaflet integration
 ├── bin/
 │   ├── run_server.jl         # Map server CLI entry point
