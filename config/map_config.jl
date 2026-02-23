@@ -40,3 +40,10 @@ const DEFAULT_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
 
 "Default tile layer attribution"
 const DEFAULT_TILE_ATTRIBUTION = "© OpenStreetMap contributors"
+
+# =============================================================================
+# Color Defaults
+# =============================================================================
+
+"Default color ramp name for all color modes"
+const DEFAULT_COLOR_RAMP = "viridis"

@@ -9,7 +9,34 @@ Core data structures for archaeological map visualization.
 #       DEFAULT_TILE_URL, DEFAULT_TILE_ATTRIBUTION
 
 export MapBounds, MapSettings, MapConfig, DateStatistics, CultureStatistics, TilePreset, TILE_PRESETS
-export ColorRamp, CultureFilter, HaplogroupFilter, YHaplotreeFilter, FilterRequest, FilterMeta, QueryResponse
+export ColorRamp, AbstractSelectionFilter, CultureFilter, YHaplogroupFilter, MtdnaFilter, YHaplotreeFilter, FilterRequest, FilterMeta, QueryResponse
+export is_missing_value, has_value, property_key
+
+# =============================================================================
+# Data Presence Helpers
+# =============================================================================
+
+"""
+    is_missing_value(v) -> Bool
+
+Return `true` when a property value should be treated as absent.
+Covers the three ways a field can be "not there" in our GeoJSON properties:
+- `nothing`  — field not present in the Dict
+- `missing`  — field present but marked as SQL/DataFrame missing
+- `""`       — field present but an empty string
+
+Use this for all string fields (culture, haplogroup, path, etc.).
+For numeric fields where `""` cannot occur, `nothing` and `missing` are
+still handled correctly because the `== ""` branch is unreachable for non-strings.
+"""
+is_missing_value(v) = v === nothing || ismissing(v) || v == ""
+
+"""
+    has_value(v) -> Bool
+
+Inverse of `is_missing_value`. Returns `true` when `v` is a real, non-empty value.
+"""
+has_value(v) = !is_missing_value(v)
 
 """
     MapBounds
@@ -179,6 +206,28 @@ end
 # =============================================================================
 
 """
+    AbstractSelectionFilter
+
+Abstract supertype for all selection-based filters.
+
+All subtypes must have a `selected::Vector{String}` field and implement
+`property_key(::MyFilterType)` returning the GeoJSON property key to filter on.
+
+This enables `apply_filter` to dispatch on filter type and look up the correct
+property key without any conditional logic.
+"""
+abstract type AbstractSelectionFilter end
+
+"""
+    property_key(filter::AbstractSelectionFilter) -> String
+
+Return the GeoJSON property key that this filter operates on.
+Implemented for each concrete filter type — this is the trait that drives
+dispatch-based filter application.
+"""
+function property_key end
+
+"""
     CultureFilter
 
 Specifies which cultures to include in the filter.
@@ -191,34 +240,58 @@ The interpretation is:
 - Empty array + include_no_culture=true → show only samples without culture
 - Non-empty array → show selected cultures (+ no-culture samples if flag set)
 """
-struct CultureFilter
+struct CultureFilter <: AbstractSelectionFilter
     selected::Vector{String}
 end
 
-# Default constructor
 CultureFilter() = CultureFilter(String[])
+property_key(::CultureFilter) = "culture"
 
 """
-    HaplogroupFilter
+    YHaplogroupFilter
 
-Specifies haplogroup filtering with text search capability.
+Specifies Y-haplogroup filtering with text search capability.
 
 # Fields
 - `search_text`: Text to filter haplogroup list (case-insensitive prefix match)
 - `selected`: Vector of haplogroup names to include (empty = none selected)
 
 The interpretation is:
-- Empty array + include_no_haplogroup=false → show nothing
-- Empty array + include_no_haplogroup=true → show only samples without haplogroup
+- Empty array + include_no_y_haplogroup=false → show nothing
+- Empty array + include_no_y_haplogroup=true → show only samples without Y-haplogroup
 - Non-empty array → show selected haplogroups (+ no-haplogroup samples if flag set)
+
+Mutually exclusive with YHaplotreeFilter — only one should be active at a time.
 """
-struct HaplogroupFilter
+struct YHaplogroupFilter <: AbstractSelectionFilter
     search_text::String
     selected::Vector{String}
 end
 
-# Default constructor
-HaplogroupFilter() = HaplogroupFilter("", String[])
+YHaplogroupFilter() = YHaplogroupFilter("", String[])
+property_key(::YHaplogroupFilter) = "y_haplogroup"
+
+"""
+    MtdnaFilter
+
+Specifies mtDNA haplogroup filtering with text search capability.
+
+# Fields
+- `search_text`: Text to filter haplogroup list (case-insensitive prefix match)
+- `selected`: Vector of mtDNA haplogroup names to include (empty = none selected)
+
+The interpretation is:
+- Empty array + include_no_mtdna=false → show nothing
+- Empty array + include_no_mtdna=true → show only samples without mtDNA
+- Non-empty array → show selected haplogroups (+ no-haplogroup samples if flag set)
+"""
+struct MtdnaFilter <: AbstractSelectionFilter
+    search_text::String
+    selected::Vector{String}
+end
+
+MtdnaFilter() = MtdnaFilter("", String[])
+property_key(::MtdnaFilter) = "mtdna"
 
 """
     YHaplotreeFilter
@@ -272,9 +345,9 @@ struct FilterRequest
     include_undated::Bool
     culture_filter::CultureFilter
     include_no_culture::Bool
-    y_haplogroup_filter::HaplogroupFilter
+    y_haplogroup_filter::YHaplogroupFilter
     include_no_y_haplogroup::Bool
-    mtdna_filter::HaplogroupFilter
+    mtdna_filter::MtdnaFilter
     include_no_mtdna::Bool
     y_haplotree_filter::YHaplotreeFilter
     color_by::Union{Symbol, Nothing}
@@ -292,17 +365,17 @@ function FilterRequest(;
     include_undated::Bool = true,
     culture_filter::CultureFilter = CultureFilter(),
     include_no_culture::Bool = true,
-    y_haplogroup_filter::HaplogroupFilter = HaplogroupFilter(),
+    y_haplogroup_filter::YHaplogroupFilter = YHaplogroupFilter(),
     include_no_y_haplogroup::Bool = true,
-    mtdna_filter::HaplogroupFilter = HaplogroupFilter(),
+    mtdna_filter::MtdnaFilter = MtdnaFilter(),
     include_no_mtdna::Bool = true,
     y_haplotree_filter::YHaplotreeFilter = YHaplotreeFilter(),
     color_by::Union{Symbol, Nothing} = nothing,
-    color_ramp::String = "viridis",
-    culture_color_ramp::String = "viridis",
-    y_haplogroup_color_ramp::String = "viridis",
-    mtdna_color_ramp::String = "viridis",
-    y_haplotree_color_ramp::String = "viridis"
+    color_ramp::String = DEFAULT_COLOR_RAMP,
+    culture_color_ramp::String = DEFAULT_COLOR_RAMP,
+    y_haplogroup_color_ramp::String = DEFAULT_COLOR_RAMP,
+    mtdna_color_ramp::String = DEFAULT_COLOR_RAMP,
+    y_haplotree_color_ramp::String = DEFAULT_COLOR_RAMP
 )
     FilterRequest(
         date_min, date_max, include_undated,

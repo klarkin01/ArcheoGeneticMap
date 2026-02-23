@@ -5,10 +5,11 @@ Statistical analysis functions for sample attributes and cascading filter option
 """
 
 export calculate_date_range, calculate_date_statistics, calculate_culture_statistics
+export passes_filter, compute_available
 export compute_available_cultures, compute_available_y_haplogroups, compute_available_mtdna
 export compute_available_date_range, build_filter_meta
-export extract_ages, extract_cultures, extract_y_haplogroups, extract_mtdna
-export build_culture_legend, build_haplogroup_legend, build_y_haplotree_legend
+export extract_ages, extract_unique_strings, extract_cultures, extract_y_haplogroups, extract_mtdna
+export build_categorical_legend, build_culture_legend, build_haplogroup_legend, build_y_haplotree_legend
 export filter_haplogroups_by_search
 
 # =============================================================================
@@ -25,7 +26,7 @@ function extract_ages(features::Vector)
     ages = Float64[]
     for feature in features
         age = get(feature["properties"], "average_age_calbp", nothing)
-        if age !== nothing && !ismissing(age)
+        if has_value(age)
             push!(ages, Float64(age))
         end
     end
@@ -33,21 +34,35 @@ function extract_ages(features::Vector)
 end
 
 """
+    extract_unique_strings(features::Vector, property_key::String) -> Vector{String}
+
+Extract all unique non-empty string values for a given property key from a
+collection of features. Returns a sorted vector, excluding nothing, missing,
+and empty strings.
+
+This is the single implementation underlying `extract_cultures`,
+`extract_y_haplogroups`, `extract_mtdna`, and any future string property
+extractions. To support a new field, call this directly or add a named wrapper.
+"""
+function extract_unique_strings(features::Vector, property_key::String)
+    value_set = Set{String}()
+    for feature in features
+        value = get(feature["properties"], property_key, nothing)
+        if has_value(value)
+            push!(value_set, String(value))
+        end
+    end
+    return sort(collect(value_set))
+end
+
+# Named wrappers — preserve the stable public API and document intent clearly.
+"""
     extract_cultures(features::Vector) -> Vector{String}
 
 Extract all unique culture values from a collection of features.
 Returns a sorted vector, excluding nothing, missing, and empty strings.
 """
-function extract_cultures(features::Vector)
-    culture_set = Set{String}()
-    for feature in features
-        culture = get(feature["properties"], "culture", nothing)
-        if culture !== nothing && !ismissing(culture) && culture != ""
-            push!(culture_set, String(culture))
-        end
-    end
-    return sort(collect(culture_set))
-end
+extract_cultures(features::Vector) = extract_unique_strings(features, "culture")
 
 """
     extract_y_haplogroups(features::Vector) -> Vector{String}
@@ -55,16 +70,7 @@ end
 Extract all unique Y-haplogroup values from a collection of features.
 Returns a sorted vector, excluding nothing, missing, and empty strings.
 """
-function extract_y_haplogroups(features::Vector)
-    haplogroup_set = Set{String}()
-    for feature in features
-        haplogroup = get(feature["properties"], "y_haplogroup", nothing)
-        if haplogroup !== nothing && !ismissing(haplogroup) && haplogroup != ""
-            push!(haplogroup_set, String(haplogroup))
-        end
-    end
-    return sort(collect(haplogroup_set))
-end
+extract_y_haplogroups(features::Vector) = extract_unique_strings(features, "y_haplogroup")
 
 """
     extract_mtdna(features::Vector) -> Vector{String}
@@ -72,16 +78,7 @@ end
 Extract all unique mtDNA haplogroup values from a collection of features.
 Returns a sorted vector, excluding nothing, missing, and empty strings.
 """
-function extract_mtdna(features::Vector)
-    mtdna_set = Set{String}()
-    for feature in features
-        mtdna = get(feature["properties"], "mtdna", nothing)
-        if mtdna !== nothing && !ismissing(mtdna) && mtdna != ""
-            push!(mtdna_set, String(mtdna))
-        end
-    end
-    return sort(collect(mtdna_set))
-end
+extract_mtdna(features::Vector) = extract_unique_strings(features, "mtdna")
 
 # =============================================================================
 # Basic Statistics
@@ -187,11 +184,91 @@ end
 # =============================================================================
 
 """
-    compute_available_cultures(features::Vector; 
-                               date_min=nothing, date_max=nothing, 
-                               include_undated=true,
-                               y_haplogroup_filter=nothing,
-                               mtdna_filter=nothing) -> Vector{String}
+    passes_filter(value, selected::Set{String}, include_missing::Bool) -> Bool
+
+Check whether a single feature property value passes one selection filter's
+constraints. Used as a building block inside `compute_available`.
+
+- If `selected` is empty, the filter is inactive → always passes.
+- If `value` is missing: passes only when `include_missing` is true.
+- Otherwise: passes only when `value` is in `selected`.
+"""
+function passes_filter(value, selected::Set{String}, include_missing::Bool)
+    isempty(selected) && return true
+    is_missing_value(value) && return include_missing
+    return value in selected
+end
+
+"""
+    compute_available(features::Vector, target::AbstractSelectionFilter;
+                      date_min, date_max, include_undated,
+                      cross_filters) -> Vector{String}
+
+Compute which values are available for the property identified by `target`,
+given date and cross-filter constraints. Collects values from features that:
+- Have a non-missing value for `property_key(target)`
+- Pass the date constraint
+- Pass all provided cross-filters
+
+`cross_filters` is a vector of `(filter::AbstractSelectionFilter, include_missing::Bool)`
+pairs representing every active filter *other than* the target's own filter.
+The target filter is intentionally excluded — we want to know what's available
+for that dimension regardless of what is currently selected in it.
+
+This is the single implementation underlying `compute_available_cultures`,
+`compute_available_y_haplogroups`, and `compute_available_mtdna`.
+"""
+function compute_available(features::Vector,
+                           target::AbstractSelectionFilter;
+                           date_min::Union{Float64, Nothing} = nothing,
+                           date_max::Union{Float64, Nothing} = nothing,
+                           include_undated::Bool = true,
+                           cross_filters::Vector{Tuple{AbstractSelectionFilter, Bool}} =
+                               Tuple{AbstractSelectionFilter, Bool}[])
+    result_set = Set{String}()
+    target_key = property_key(target)
+
+    # Pre-compute selected sets for cross-filters once outside the loop
+    cross_selected = [(Set(f.selected), include_m) for (f, include_m) in cross_filters]
+    cross_keys = [property_key(f) for (f, _) in cross_filters]
+
+    for feature in features
+        props = feature["properties"]
+        target_value = get(props, target_key, nothing)
+
+        # Skip features with no value for the target dimension
+        is_missing_value(target_value) && continue
+
+        # Check date constraint
+        age = get(props, "average_age_calbp", nothing)
+        if is_missing_value(age)
+            include_undated || continue
+        else
+            age_val = Float64(age)
+            date_min !== nothing && age_val < date_min && continue
+            date_max !== nothing && age_val > date_max && continue
+        end
+
+        # Check all cross-filter constraints
+        passed = true
+        for i in eachindex(cross_keys)
+            value = get(props, cross_keys[i], nothing)
+            if !passes_filter(value, cross_selected[i][1], cross_selected[i][2])
+                passed = false
+                break
+            end
+        end
+        passed || continue
+
+        push!(result_set, String(target_value))
+    end
+
+    return sort(collect(result_set))
+end
+
+# Named wrappers — stable public API, each excluding its own filter from cross-filters.
+"""
+    compute_available_cultures(features::Vector; filters...) -> Vector{String}
 
 Compute which cultures are available given date and haplogroup constraints.
 """
@@ -199,68 +276,15 @@ function compute_available_cultures(features::Vector;
                                     date_min::Union{Float64, Nothing} = nothing,
                                     date_max::Union{Float64, Nothing} = nothing,
                                     include_undated::Bool = true,
-                                    y_haplogroup_filter::Union{HaplogroupFilter, Nothing} = nothing,
+                                    y_haplogroup_filter::Union{YHaplogroupFilter, Nothing} = nothing,
                                     include_no_y_haplogroup::Bool = true,
-                                    mtdna_filter::Union{HaplogroupFilter, Nothing} = nothing,
+                                    mtdna_filter::Union{MtdnaFilter, Nothing} = nothing,
                                     include_no_mtdna::Bool = true)
-    culture_set = Set{String}()
-    
-    y_selected = y_haplogroup_filter !== nothing ? Set(y_haplogroup_filter.selected) : Set{String}()
-    mtdna_selected = mtdna_filter !== nothing ? Set(mtdna_filter.selected) : Set{String}()
-    
-    for feature in features
-        props = feature["properties"]
-        age = get(props, "average_age_calbp", nothing)
-        culture = get(props, "culture", nothing)
-        y_hap = get(props, "y_haplogroup", nothing)
-        mtdna_hap = get(props, "mtdna", nothing)
-        
-        # Skip if no culture
-        if culture === nothing || ismissing(culture) || culture == ""
-            continue
-        end
-        
-        # Check date constraints
-        if age === nothing || ismissing(age)
-            if !include_undated
-                continue
-            end
-        else
-            age_val = Float64(age)
-            if date_min !== nothing && age_val < date_min
-                continue
-            end
-            if date_max !== nothing && age_val > date_max
-                continue
-            end
-        end
-        
-        # Check Y-haplogroup constraints
-        if y_haplogroup_filter !== nothing && !isempty(y_selected)
-            if y_hap === nothing || ismissing(y_hap) || y_hap == ""
-                if !include_no_y_haplogroup
-                    continue
-                end
-            elseif !(y_hap in y_selected)
-                continue
-            end
-        end
-        
-        # Check mtDNA constraints
-        if mtdna_filter !== nothing && !isempty(mtdna_selected)
-            if mtdna_hap === nothing || ismissing(mtdna_hap) || mtdna_hap == ""
-                if !include_no_mtdna
-                    continue
-                end
-            elseif !(mtdna_hap in mtdna_selected)
-                continue
-            end
-        end
-        
-        push!(culture_set, String(culture))
-    end
-    
-    return sort(collect(culture_set))
+    cross_filters = Tuple{AbstractSelectionFilter, Bool}[]
+    y_haplogroup_filter !== nothing && push!(cross_filters, (y_haplogroup_filter, include_no_y_haplogroup))
+    mtdna_filter !== nothing && push!(cross_filters, (mtdna_filter, include_no_mtdna))
+    return compute_available(features, CultureFilter();
+        date_min, date_max, include_undated, cross_filters)
 end
 
 """
@@ -269,71 +293,18 @@ end
 Compute which Y-haplogroups are available given date, culture, and mtDNA constraints.
 """
 function compute_available_y_haplogroups(features::Vector;
-                                        date_min::Union{Float64, Nothing} = nothing,
-                                        date_max::Union{Float64, Nothing} = nothing,
-                                        include_undated::Bool = true,
-                                        culture_filter::Union{CultureFilter, Nothing} = nothing,
-                                        include_no_culture::Bool = true,
-                                        mtdna_filter::Union{HaplogroupFilter, Nothing} = nothing,
-                                        include_no_mtdna::Bool = true)
-    haplogroup_set = Set{String}()
-    
-    culture_selected = culture_filter !== nothing ? Set(culture_filter.selected) : Set{String}()
-    mtdna_selected = mtdna_filter !== nothing ? Set(mtdna_filter.selected) : Set{String}()
-    
-    for feature in features
-        props = feature["properties"]
-        age = get(props, "average_age_calbp", nothing)
-        culture = get(props, "culture", nothing)
-        y_hap = get(props, "y_haplogroup", nothing)
-        mtdna_hap = get(props, "mtdna", nothing)
-        
-        # Skip if no Y-haplogroup
-        if y_hap === nothing || ismissing(y_hap) || y_hap == ""
-            continue
-        end
-        
-        # Check date constraints
-        if age === nothing || ismissing(age)
-            if !include_undated
-                continue
-            end
-        else
-            age_val = Float64(age)
-            if date_min !== nothing && age_val < date_min
-                continue
-            end
-            if date_max !== nothing && age_val > date_max
-                continue
-            end
-        end
-        
-        # Check culture constraints
-        if culture_filter !== nothing && !isempty(culture_selected)
-            if culture === nothing || ismissing(culture) || culture == ""
-                if !include_no_culture
-                    continue
-                end
-            elseif !(culture in culture_selected)
-                continue
-            end
-        end
-        
-        # Check mtDNA constraints
-        if mtdna_filter !== nothing && !isempty(mtdna_selected)
-            if mtdna_hap === nothing || ismissing(mtdna_hap) || mtdna_hap == ""
-                if !include_no_mtdna
-                    continue
-                end
-            elseif !(mtdna_hap in mtdna_selected)
-                continue
-            end
-        end
-        
-        push!(haplogroup_set, String(y_hap))
-    end
-    
-    return sort(collect(haplogroup_set))
+                                         date_min::Union{Float64, Nothing} = nothing,
+                                         date_max::Union{Float64, Nothing} = nothing,
+                                         include_undated::Bool = true,
+                                         culture_filter::Union{CultureFilter, Nothing} = nothing,
+                                         include_no_culture::Bool = true,
+                                         mtdna_filter::Union{MtdnaFilter, Nothing} = nothing,
+                                         include_no_mtdna::Bool = true)
+    cross_filters = Tuple{AbstractSelectionFilter, Bool}[]
+    culture_filter !== nothing && push!(cross_filters, (culture_filter, include_no_culture))
+    mtdna_filter !== nothing && push!(cross_filters, (mtdna_filter, include_no_mtdna))
+    return compute_available(features, YHaplogroupFilter();
+        date_min, date_max, include_undated, cross_filters)
 end
 
 """
@@ -342,142 +313,64 @@ end
 Compute which mtDNA haplogroups are available given date, culture, and Y-haplogroup constraints.
 """
 function compute_available_mtdna(features::Vector;
-                                date_min::Union{Float64, Nothing} = nothing,
-                                date_max::Union{Float64, Nothing} = nothing,
-                                include_undated::Bool = true,
-                                culture_filter::Union{CultureFilter, Nothing} = nothing,
-                                include_no_culture::Bool = true,
-                                y_haplogroup_filter::Union{HaplogroupFilter, Nothing} = nothing,
-                                include_no_y_haplogroup::Bool = true)
-    mtdna_set = Set{String}()
-    
-    culture_selected = culture_filter !== nothing ? Set(culture_filter.selected) : Set{String}()
-    y_selected = y_haplogroup_filter !== nothing ? Set(y_haplogroup_filter.selected) : Set{String}()
-    
-    for feature in features
-        props = feature["properties"]
-        age = get(props, "average_age_calbp", nothing)
-        culture = get(props, "culture", nothing)
-        y_hap = get(props, "y_haplogroup", nothing)
-        mtdna_hap = get(props, "mtdna", nothing)
-        
-        # Skip if no mtDNA
-        if mtdna_hap === nothing || ismissing(mtdna_hap) || mtdna_hap == ""
-            continue
-        end
-        
-        # Check date constraints
-        if age === nothing || ismissing(age)
-            if !include_undated
-                continue
-            end
-        else
-            age_val = Float64(age)
-            if date_min !== nothing && age_val < date_min
-                continue
-            end
-            if date_max !== nothing && age_val > date_max
-                continue
-            end
-        end
-        
-        # Check culture constraints
-        if culture_filter !== nothing && !isempty(culture_selected)
-            if culture === nothing || ismissing(culture) || culture == ""
-                if !include_no_culture
-                    continue
-                end
-            elseif !(culture in culture_selected)
-                continue
-            end
-        end
-        
-        # Check Y-haplogroup constraints
-        if y_haplogroup_filter !== nothing && !isempty(y_selected)
-            if y_hap === nothing || ismissing(y_hap) || y_hap == ""
-                if !include_no_y_haplogroup
-                    continue
-                end
-            elseif !(y_hap in y_selected)
-                continue
-            end
-        end
-        
-        push!(mtdna_set, String(mtdna_hap))
-    end
-    
-    return sort(collect(mtdna_set))
+                                 date_min::Union{Float64, Nothing} = nothing,
+                                 date_max::Union{Float64, Nothing} = nothing,
+                                 include_undated::Bool = true,
+                                 culture_filter::Union{CultureFilter, Nothing} = nothing,
+                                 include_no_culture::Bool = true,
+                                 y_haplogroup_filter::Union{YHaplogroupFilter, Nothing} = nothing,
+                                 include_no_y_haplogroup::Bool = true)
+    cross_filters = Tuple{AbstractSelectionFilter, Bool}[]
+    culture_filter !== nothing && push!(cross_filters, (culture_filter, include_no_culture))
+    y_haplogroup_filter !== nothing && push!(cross_filters, (y_haplogroup_filter, include_no_y_haplogroup))
+    return compute_available(features, MtdnaFilter();
+        date_min, date_max, include_undated, cross_filters)
 end
 
 """
-    compute_available_date_range(features::Vector, filters...) -> Tuple{Float64, Float64}
+    compute_available_date_range(features::Vector, culture_filter::CultureFilter;
+                                 filters...) -> Tuple{Float64, Float64}
 
 Compute the date range available given culture and haplogroup constraints.
+Uses the same cross-filter logic as `compute_available` but collects ages
+rather than string values.
 """
 function compute_available_date_range(features::Vector,
                                       culture_filter::CultureFilter;
                                       include_no_culture::Bool = true,
-                                      y_haplogroup_filter::Union{HaplogroupFilter, Nothing} = nothing,
+                                      y_haplogroup_filter::Union{YHaplogroupFilter, Nothing} = nothing,
                                       include_no_y_haplogroup::Bool = true,
-                                      mtdna_filter::Union{HaplogroupFilter, Nothing} = nothing,
+                                      mtdna_filter::Union{MtdnaFilter, Nothing} = nothing,
                                       include_no_mtdna::Bool = true)
+    cross_filters = Tuple{AbstractSelectionFilter, Bool}[
+        (culture_filter, include_no_culture)
+    ]
+    y_haplogroup_filter !== nothing && push!(cross_filters, (y_haplogroup_filter, include_no_y_haplogroup))
+    mtdna_filter !== nothing && push!(cross_filters, (mtdna_filter, include_no_mtdna))
+
+    cross_selected = [(Set(f.selected), include_m) for (f, include_m) in cross_filters]
+    cross_keys = [property_key(f) for (f, _) in cross_filters]
+
     ages = Float64[]
-    culture_selected = Set(culture_filter.selected)
-    y_selected = y_haplogroup_filter !== nothing ? Set(y_haplogroup_filter.selected) : Set{String}()
-    mtdna_selected = mtdna_filter !== nothing ? Set(mtdna_filter.selected) : Set{String}()
-    
     for feature in features
         props = feature["properties"]
         age = get(props, "average_age_calbp", nothing)
-        culture = get(props, "culture", nothing)
-        y_hap = get(props, "y_haplogroup", nothing)
-        mtdna_hap = get(props, "mtdna", nothing)
-        
-        # Skip if no age
-        if age === nothing || ismissing(age)
-            continue
-        end
-        
-        # Check culture constraints
-        if !isempty(culture_selected)
-            if culture === nothing || ismissing(culture) || culture == ""
-                if !include_no_culture
-                    continue
-                end
-            elseif !(culture in culture_selected)
-                continue
+        is_missing_value(age) && continue
+
+        passed = true
+        for i in eachindex(cross_keys)
+            value = get(props, cross_keys[i], nothing)
+            if !passes_filter(value, cross_selected[i][1], cross_selected[i][2])
+                passed = false
+                break
             end
         end
-        
-        # Check Y-haplogroup constraints
-        if y_haplogroup_filter !== nothing && !isempty(y_selected)
-            if y_hap === nothing || ismissing(y_hap) || y_hap == ""
-                if !include_no_y_haplogroup
-                    continue
-                end
-            elseif !(y_hap in y_selected)
-                continue
-            end
-        end
-        
-        # Check mtDNA constraints
-        if mtdna_filter !== nothing && !isempty(mtdna_selected)
-            if mtdna_hap === nothing || ismissing(mtdna_hap) || mtdna_hap == ""
-                if !include_no_mtdna
-                    continue
-                end
-            elseif !(mtdna_hap in mtdna_selected)
-                continue
-            end
-        end
-        
+        passed || continue
+
         push!(ages, Float64(age))
     end
-    
-    if isempty(ages)
-        return (DEFAULT_MIN_AGE, DEFAULT_MAX_AGE)
-    end
-    
+
+    isempty(ages) && return (DEFAULT_MIN_AGE, DEFAULT_MAX_AGE)
     return (minimum(ages), maximum(ages))
 end
 
@@ -505,60 +398,45 @@ end
 # =============================================================================
 
 """
-    build_culture_legend(selected_cultures::Vector{String},
-                        culture_color_ramp::String) -> Vector{Tuple{String, String}}
+    build_categorical_legend(items::Vector{String}, ramp_name::String) -> Vector{Tuple{String, String}}
 
-Build a culture legend with (name, color) pairs for display.
-Returns all selected cultures with their colors based on the color ramp.
+Build a legend as (name, color) pairs for any ordered list of categorical items.
+Colors are assigned by position using `color_for_category`, so they match exactly
+what markers on the map receive.
+
+This is the single implementation underlying `build_culture_legend`,
+`build_haplogroup_legend`, and `build_y_haplotree_legend`.
 """
-function build_culture_legend(selected_cultures::Vector{String},
-                              culture_color_ramp::String)
-    legend = Tuple{String, String}[]
-    
-    for culture in selected_cultures
-        color = color_for_culture(culture, selected_cultures, culture_color_ramp)
-        push!(legend, (culture, color))
-    end
-    
-    return legend
+function build_categorical_legend(items::Vector{String}, ramp_name::String)
+    return [(item, color_for_category(item, items, ramp_name)) for item in items]
 end
 
+# Named wrappers — used by build_filter_meta and preserve the stable public API.
 """
-    build_haplogroup_legend(selected_haplogroups::Vector{String},
-                           haplogroup_color_ramp::String) -> Vector{Tuple{String, String}}
+    build_culture_legend(selected_cultures::Vector{String}, ramp_name::String) -> Vector{Tuple{String, String}}
 
-Build a haplogroup legend with (name, color) pairs for display.
-Returns all selected haplogroups with their colors based on the color ramp.
+Build a culture legend. Delegates to `build_categorical_legend`.
 """
-function build_haplogroup_legend(selected_haplogroups::Vector{String},
-                                haplogroup_color_ramp::String)
-    legend = Tuple{String, String}[]
-    
-    for haplogroup in selected_haplogroups
-        color = color_for_haplogroup(haplogroup, selected_haplogroups, haplogroup_color_ramp)
-        push!(legend, (haplogroup, color))
-    end
-    
-    return legend
-end
+build_culture_legend(selected_cultures::Vector{String}, ramp_name::String) =
+    build_categorical_legend(selected_cultures, ramp_name)
 
 """
-    build_y_haplotree_legend(terms::Vector{String},
-                             ramp_name::String) -> Vector{Tuple{String, String}}
+    build_haplogroup_legend(selected_haplogroups::Vector{String}, ramp_name::String) -> Vector{Tuple{String, String}}
 
-Build a legend with (term, color) pairs for Y-haplotree term coloring.
-Colors match those assigned by color_for_y_haplotree_term (first-match-wins order).
+Build a haplogroup legend. Delegates to `build_categorical_legend`.
 """
-function build_y_haplotree_legend(terms::Vector{String}, ramp_name::String)
-    legend = Tuple{String, String}[]
-    n = length(terms)
-    for (idx, term) in enumerate(terms)
-        t = n == 1 ? 0.5 : (idx - 1) / (n - 1)
-        color = interpolate_color(ramp_name, t)
-        push!(legend, (term, color))
-    end
-    return legend
-end
+build_haplogroup_legend(selected_haplogroups::Vector{String}, ramp_name::String) =
+    build_categorical_legend(selected_haplogroups, ramp_name)
+
+"""
+    build_y_haplotree_legend(terms::Vector{String}, ramp_name::String) -> Vector{Tuple{String, String}}
+
+Build a Y-haplotree legend. Each term receives a color by its position in the
+terms list, matching the first-match-wins color assignment in `color_for_y_haplotree_term`.
+Delegates to `build_categorical_legend`.
+"""
+build_y_haplotree_legend(terms::Vector{String}, ramp_name::String) =
+    build_categorical_legend(terms, ramp_name)
 
 # =============================================================================
 # Filter Metadata Builder
