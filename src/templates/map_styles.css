@@ -615,3 +615,74 @@ body {
 .clear-all-button:hover {
     background: #b02a37;
 }
+
+/* ==========================================================================
+   Spiderifier — Summary Popup (large clusters)
+   ========================================================================== */
+
+.spider-popup {
+    font-size: 13px;
+    min-width: 180px;
+}
+
+.spider-popup-header {
+    font-weight: 600;
+    color: #343a40;
+    margin-bottom: 6px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.spider-popup-scroll {
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.spider-popup-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.spider-popup-row {
+    cursor: pointer;
+}
+
+.spider-popup-row:hover {
+    background-color: #e9f3ff;
+}
+
+.spider-popup-row td {
+    padding: 4px 2px;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.spider-popup-link {
+    color: #0056b3;
+    text-decoration: none;
+    font-size: 12px;
+}
+
+.spider-popup-link:hover {
+    text-decoration: underline;
+}
+
+/* Leaflet popup container override for spider summary */
+.spider-summary-popup .leaflet-popup-content {
+    margin: 10px 14px;
+}
+
+/* Colored dot swatch in summary popup rows */
+.spider-popup-dot-cell {
+    width: 18px;
+    padding-right: 4px;
+    vertical-align: middle;
+}
+
+.spider-popup-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    opacity: 0.7;
+    vertical-align: middle;
+}

@@ -77,6 +77,9 @@ function initMap(config) {
  * Colors are already assigned by the server in feature.properties._color
  */
 function updateMapLayer(features, defaultColor, pointRadius) {
+    // Detach spiderifier before removing old layer (cleans up events and spokes)
+    Spiderifier.detach();
+
     // Remove existing layer
     if (dataLayer) {
         map.removeLayer(dataLayer);
@@ -103,9 +106,19 @@ function updateMapLayer(features, defaultColor, pointRadius) {
             });
         },
         onEachFeature: function(feature, layer) {
-            layer.bindPopup(PopupBuilder.build(feature.properties));
+            // Popups are bound by Spiderifier after group detection:
+            //   - Solo markers get a normal click popup
+            //   - Cluster origins get no popup (click only locks/unlocks spokes)
+            //   - Spoke tips get their own popup
         }
     }).addTo(map);
+
+    // Attach spiderifier to the new layer
+    Spiderifier.attach(map, dataLayer, {
+        pixelRadius: 8,
+        clusterThreshold: 15,
+        spokeLength: { min: 44, max: 72 }
+    });
 }
 
 // =============================================================================
