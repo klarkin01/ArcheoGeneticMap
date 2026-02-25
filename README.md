@@ -2,9 +2,9 @@
 
 Archaeological and paleogenomic sample visualization on interactive web maps.
 
-![screenshot](docs/screenshot_osm.png)
+<img src="docs/screenshot_osm.png" width="800" alt="Haplogroup filtering on OSM basemap">
 
-![screenshot](docs/screenshot_dark.png)
+<img src="docs/screenshot_dark.png" width="800" alt="Haplogroup filtering on dark basemap">
 
 
 ## Prerequisites
