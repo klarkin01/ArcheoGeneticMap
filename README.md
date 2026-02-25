@@ -2,6 +2,11 @@
 
 Archaeological and paleogenomic sample visualization on interactive web maps.
 
+![screenshot](docs/screenshot_osm.png)
+
+![screenshot](docs/screenshot_dark.png)
+
+
 ## Prerequisites
 
 ArcheoGeneticMap requires Julia. If you haven't used Julia before, the quickest way to install it is via **juliaup**, Julia's official installer and version manager:
@@ -112,6 +117,9 @@ ArcheoGeneticMap/
 ├── README.md                 # This file
 ├── LICENSE                   # boilerplate MIT License file
 ├── data/                     # GeoPackage files to serve
+├── docs/
+│   ├── screenshot_osm.png    # screenshot with a light base layer
+│   └── screenshot_dark.png   # screenshot with a dark base layer
 ├── config/
 │   ├── map_config.jl         # Map server configuration constants
 │   └── maker_config.jl       # GeoPackage maker column mapping configuration
