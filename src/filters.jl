@@ -5,7 +5,7 @@ Filter application logic for GeoJSON features.
 Each filter function takes a collection of features and returns a filtered subset.
 """
 
-export apply_date_filter, apply_filter, apply_culture_filter, apply_y_haplogroup_filter, apply_mtdna_filter, apply_y_haplotree_filter, apply_filters
+export apply_date_filter, apply_filter, apply_culture_filter, apply_y_haplogroup_filter, apply_mtdna_filter, apply_source_filter, apply_y_haplotree_filter, apply_filters
 
 # =============================================================================
 # Individual Filter Functions
@@ -116,6 +116,16 @@ apply_mtdna_filter(features::Vector,
                    include_no_mtdna::Bool) =
     apply_filter(features, mtdna_filter, include_no_mtdna)
 
+"""
+    apply_source_filter(features, source_filter::SourceFilter) -> Vector
+
+Filter features by source/study. Delegates to `apply_filter`.
+Samples with no source are always included (include_missing = true).
+"""
+apply_source_filter(features::Vector,
+                    source_filter::SourceFilter) =
+    apply_filter(features, source_filter, true)
+
 # =============================================================================
 # Haplotree Filter (structurally distinct — token matching, not set membership)
 # =============================================================================
@@ -165,6 +175,7 @@ Filters are applied in order:
 3. Y-haplogroup filter (skipped when y_haplotree_filter is active)
 4. mtDNA filter
 5. Y-haplotree filter (skipped when y_haplogroup_filter is active)
+6. Source filter
 
 Note: y_haplogroup_filter and y_haplotree_filter are mutually exclusive.
 When y_haplotree_filter has terms, y_haplogroup_filter is ignored, and vice versa.
@@ -190,6 +201,8 @@ function apply_filters(features::Vector, request::FilterRequest)
     end
 
     result = apply_filter(result, request.mtdna_filter, request.include_no_mtdna)
+
+    result = apply_source_filter(result, request.source_filter)
 
     return result
 end

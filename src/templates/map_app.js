@@ -137,13 +137,15 @@ function filterController() {
         cultureDropdownOpen: false,
         yHaplogroupDropdownOpen: false,
         mtdnaDropdownOpen: false,
+        sourceDropdownOpen: false,
         loading: false,
         sections: {
             dateRange: false,
             culture: false,
             yHaplogroup: false,
             mtdna: false,
-            yHaplotree: false
+            yHaplotree: false,
+            source: false
         },
         
         // ---------------------------------------------------------------------
@@ -160,6 +162,7 @@ function filterController() {
             availableCultures: [],
             availableYHaplogroups: [],
             availableMtdna: [],
+            availableSources: [],
             filteredYHaplogroups: [],
             filteredMtdna: [],
             availableDateRange: { min: 0, max: 50000 },
@@ -197,6 +200,9 @@ function filterController() {
         yHaplotreeTerms: [],       // confirmed search terms (tag list)
         yHaplotreeSearchInput: '', // current text in the search box
         yHaplotreeColorRamp: 'viridis',
+
+        // Source filter state
+        selectedSources: [],
         
         // Color settings
         colorBy: null,  // null, 'age', 'culture', 'y_haplogroup', 'mtdna', 'y_haplotree'
@@ -247,6 +253,14 @@ function filterController() {
         
         get allMtdnaSelected() {
             return this.selectedMtdna.length === this.availableMtdna.length;
+        },
+
+        get availableSources() {
+            return this.meta.availableSources || [];
+        },
+
+        get allSourcesSelected() {
+            return this.selectedSources.length === this.availableSources.length;
         },
         
         get availableColorRamps() {
@@ -302,6 +316,9 @@ function filterController() {
                 
                 // Initialize mtDNA selection to all
                 this.selectedMtdna = [...this.config.allMtdna];
+
+                // Initialize source selection to all
+                this.selectedSources = [...this.config.allSources];
                 
                 // Set defaults
                 this.filters.includeUndated = this.config.defaults.includeUndated;
@@ -345,6 +362,7 @@ function filterController() {
                 selectedMtdna: this.selectedMtdna,
                 includeNoMtdna: this.filters.includeNoMtdna,
                 yHaplotreeTerms: this.yHaplotreeTerms,
+                selectedSources: this.selectedSources,
                 colorBy: this.colorBy,
                 colorRamp: this.colorRamp,
                 cultureColorRamp: this.cultureColorRamp,
@@ -400,6 +418,11 @@ function filterController() {
                 this.selectedMtdna = this.selectedMtdna.filter(
                     hap => availableMt.includes(hap)
                 );
+
+                // Sync selectedSources with availableSources
+                this.selectedSources = this.selectedSources.filter(
+                    source => this.meta.availableSources.includes(source)
+                );
                 
                 // Update map
                 updateMapLayer(
@@ -454,6 +477,9 @@ function filterController() {
             // Reset Y-haplotree filter
             this.yHaplotreeTerms = [];
             this.yHaplotreeSearchInput = '';
+
+            // Reset source selection to all
+            this.selectedSources = [...this.config.allSources];
             
             // Reset include flags to defaults
             this.filters.includeUndated = this.config.defaults.includeUndated;
@@ -828,6 +854,54 @@ function filterController() {
             }
         },
         
+        // ---------------------------------------------------------------------
+        // Source Filter Methods
+        // ---------------------------------------------------------------------
+
+        /**
+         * Get summary text for the source multi-select toggle button
+         */
+        selectedSourcesSummary() {
+            const count = this.selectedSources.length;
+            const total = this.availableSources.length;
+            if (count === 0) return 'None selected';
+            if (count === total) return 'All studies';
+            if (count === 1) return this.selectedSources[0];
+            return count + ' studies selected';
+        },
+
+        /**
+         * Toggle a single source selection
+         */
+        toggleSource(source) {
+            const index = this.selectedSources.indexOf(source);
+            if (index === -1) {
+                this.selectedSources.push(source);
+            } else {
+                this.selectedSources.splice(index, 1);
+            }
+            this.applyFilters();
+        },
+
+        /**
+         * Toggle all sources on/off
+         */
+        toggleAllSources() {
+            if (this.allSourcesSelected) {
+                this.selectedSources = [];
+            } else {
+                this.selectedSources = [...this.availableSources];
+            }
+            this.applyFilters();
+        },
+
+        /**
+         * Check if a source is currently selected
+         */
+        isSourceSelected(source) {
+            return this.selectedSources.includes(source);
+        },
+
         // ---------------------------------------------------------------------
         // Y-Haplotree Filter Methods
         // ---------------------------------------------------------------------

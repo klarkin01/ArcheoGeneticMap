@@ -294,6 +294,26 @@ MtdnaFilter() = MtdnaFilter("", String[])
 property_key(::MtdnaFilter) = "mtdna"
 
 """
+    SourceFilter
+
+Specifies which studies/sources to include in the filter.
+
+# Fields
+- `selected`: Vector of source names to include (empty = none selected)
+
+The interpretation is:
+- Empty array → show nothing
+- Non-empty array → show selected sources
+Samples with no source are always included (see `apply_filters`).
+"""
+struct SourceFilter <: AbstractSelectionFilter
+    selected::Vector{String}
+end
+
+SourceFilter() = SourceFilter(String[])
+property_key(::SourceFilter) = "source"
+
+"""
     YHaplotreeFilter
 
 Specifies Y-haplotree filtering by a list of token strings.
@@ -332,6 +352,7 @@ All filter fields are optional - nothing means "no filter applied".
 - `mtdna_filter`: mtDNA haplogroup filter specification
 - `include_no_mtdna`: Whether to include samples without mtDNA
 - `y_haplotree_filter`: Y-haplotree token filter (mutually exclusive with y_haplogroup_filter)
+- `source_filter`: Source/study filter specification
 - `color_by`: How to color markers (:age, :culture, :y_haplogroup, :mtdna, :y_haplotree, or nothing)
 - `color_ramp`: Name of color ramp to use for age coloring (e.g., "viridis")
 - `culture_color_ramp`: Name of color ramp to use for culture coloring
@@ -350,6 +371,7 @@ struct FilterRequest
     mtdna_filter::MtdnaFilter
     include_no_mtdna::Bool
     y_haplotree_filter::YHaplotreeFilter
+    source_filter::SourceFilter
     color_by::Union{Symbol, Nothing}
     color_ramp::String
     culture_color_ramp::String
@@ -370,6 +392,7 @@ function FilterRequest(;
     mtdna_filter::MtdnaFilter = MtdnaFilter(),
     include_no_mtdna::Bool = true,
     y_haplotree_filter::YHaplotreeFilter = YHaplotreeFilter(),
+    source_filter::SourceFilter = SourceFilter(),
     color_by::Union{Symbol, Nothing} = nothing,
     color_ramp::String = DEFAULT_COLOR_RAMP,
     culture_color_ramp::String = DEFAULT_COLOR_RAMP,
@@ -383,6 +406,7 @@ function FilterRequest(;
         y_haplogroup_filter, include_no_y_haplogroup,
         mtdna_filter, include_no_mtdna,
         y_haplotree_filter,
+        source_filter,
         color_by, color_ramp,
         culture_color_ramp, y_haplogroup_color_ramp, mtdna_color_ramp,
         y_haplotree_color_ramp
@@ -401,6 +425,7 @@ This drives what the UI can display for cascading filters.
 - `available_cultures`: Cultures available given current filters
 - `available_y_haplogroups`: Y-haplogroups available given current filters
 - `available_mtdna`: mtDNA haplogroups available given current filters
+- `available_sources`: Sources available given current filters
 - `filtered_y_haplogroups`: Y-haplogroups after search text filtering
 - `filtered_mtdna`: mtDNA haplogroups after search text filtering
 - `available_date_range`: Date range available given current filters
@@ -416,6 +441,7 @@ struct FilterMeta
     available_cultures::Vector{String}
     available_y_haplogroups::Vector{String}
     available_mtdna::Vector{String}
+    available_sources::Vector{String}
     filtered_y_haplogroups::Vector{String}
     filtered_mtdna::Vector{String}
     available_date_range::Tuple{Float64, Float64}

@@ -113,6 +113,11 @@ function parse_filter_request(payload::Dict)
     y_haplotree_terms = String[string(s) for s in y_haplotree_terms_raw]
     y_haplotree_filter = YHaplotreeFilter(y_haplotree_terms)
 
+    # Parse source filter
+    selected_sources_raw = get(payload, "selectedSources", [])
+    selected_sources = String[string(s) for s in selected_sources_raw]
+    source_filter = SourceFilter(selected_sources)
+
     # Parse color settings
     color_by_str = get(payload, "colorBy", nothing)
     color_by = if color_by_str === nothing || color_by_str == ""
@@ -138,6 +143,7 @@ function parse_filter_request(payload::Dict)
         mtdna_filter = mtdna_filter,
         include_no_mtdna = include_no_mtdna,
         y_haplotree_filter = y_haplotree_filter,
+        source_filter = source_filter,
         color_by = color_by,
         color_ramp = color_ramp,
         culture_color_ramp = culture_color_ramp,
@@ -161,6 +167,7 @@ function query_response_to_dict(response::QueryResponse)
             "availableCultures" => response.meta.available_cultures,
             "availableYHaplogroups" => response.meta.available_y_haplogroups,
             "availableMtdna" => response.meta.available_mtdna,
+            "availableSources" => response.meta.available_sources,
             "filteredYHaplogroups" => response.meta.filtered_y_haplogroups,
             "filteredMtdna" => response.meta.filtered_mtdna,
             "availableDateRange" => Dict(
@@ -213,6 +220,7 @@ function build_config_response()
     # Extract all haplogroups for initial display
     all_y_haplogroups = extract_y_haplogroups(geojson["features"])
     all_mtdna = extract_mtdna(geojson["features"])
+    all_sources = extract_sources(geojson["features"])
     
     return Dict(
         "colorRamps" => get_color_ramp_info(),
@@ -252,7 +260,8 @@ function build_config_response()
         ),
         "allCultures" => culture_stats.culture_names,
         "allYHaplogroups" => all_y_haplogroups,
-        "allMtdna" => all_mtdna
+        "allMtdna" => all_mtdna,
+        "allSources" => all_sources
     )
 end
 

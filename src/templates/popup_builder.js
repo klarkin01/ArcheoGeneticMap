@@ -59,6 +59,10 @@ const PopupBuilder = (function() {
         {
             key: 'y_haplotree',
             label: 'Y Haplotree'
+        },
+        {
+            key: 'source',
+            label: 'Source'
         }
     ];
     

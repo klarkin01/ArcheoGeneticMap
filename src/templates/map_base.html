@@ -471,6 +471,51 @@
                         </div>
                     </div>
                     </div>
+
+                <!-- Source Filter -->
+                <div class="filter-section">
+                    <div class="filter-header" @click="sections.source = !sections.source">
+                        <span>Study / Source</span>
+                        <span class="chevron" :class="{ 'collapsed': !sections.source }">&#x25BC;</span>
+                    </div>
+                    <div class="filter-body" x-show="sections.source">
+                        <div class="culture-container">
+                            <!-- Multi-select dropdown -->
+                            <label class="filter-label">Select Studies</label>
+                            <div class="multi-select-wrapper">
+                                <div class="multi-select-toggle" @click="sourceDropdownOpen = !sourceDropdownOpen">
+                                    <span x-text="selectedSourcesSummary()"></span>
+                                    <span class="chevron" :class="{ 'collapsed': !sourceDropdownOpen }">&#x25BC;</span>
+                                </div>
+                                <div class="multi-select-dropdown" x-show="sourceDropdownOpen" @click.away="sourceDropdownOpen = false">
+                                    <!-- Select All option -->
+                                    <label class="multi-select-option select-all">
+                                        <input type="checkbox"
+                                            :checked="allSourcesSelected"
+                                            @change="toggleAllSources()">
+                                        <span>All</span>
+                                    </label>
+                                    <div class="multi-select-divider"></div>
+                                    <!-- Individual source options -->
+                                    <template x-for="source in availableSources" :key="source">
+                                        <label class="multi-select-option">
+                                            <input type="checkbox"
+                                                :value="source"
+                                                :checked="isSourceSelected(source)"
+                                                @change="toggleSource(source)">
+                                            <span x-text="source"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <div class="stats">
+                                <span x-text="selectedSources.length"></span> of <span x-text="availableSources.length"></span> studies selected
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             
             <div class="sidebar-footer">
