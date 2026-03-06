@@ -60,7 +60,8 @@ function extract_properties(feature)
     props["sample_id"] = safe_get_field(feature, "sample_id", "")
     
     # Optional string fields - convert empty to nothing
-    for field in ["y_haplogroup", "mtdna", "culture", "y_haplotree"]
+    # Keep in sync with the fields written by gpkg_maker.jl / samples_to_geodataframe
+    for field in ["y_haplogroup", "mtdna", "culture", "y_haplotree", "source"]
         value = safe_get_field(feature, field, "")
         props[field] = (value == "" || ismissing(value)) ? nothing : value
     end

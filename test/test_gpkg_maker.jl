@@ -51,7 +51,8 @@ make_df(d::Dict) = DataFrame(d)
                 "MtDNA"             => ["H"],
                 "Culture"           => ["Yamnaya"],
                 "Average age calBP" => [5000.0],
-                "FTDNA-Y-Haplotree" => ["R-M207>M173>M343"]
+                "FTDNA-Y-Haplotree" => ["R-M207>M173>M343"],
+                "Source"            => ["Haak2015"]
             ))
             cols = resolve_columns(df)
             @test cols.sample_id    == "Sample ID"
@@ -62,6 +63,7 @@ make_df(d::Dict) = DataFrame(d)
             @test cols.culture      == "Culture"
             @test cols.average_age  == "Average age calBP"
             @test cols.y_haplotree  == "FTDNA-Y-Haplotree"
+            @test cols.source       == "Source"
         end
 
         @testset "optional columns are nothing when absent" begin
@@ -76,6 +78,7 @@ make_df(d::Dict) = DataFrame(d)
             @test cols.culture      === nothing
             @test cols.average_age  === nothing
             @test cols.y_haplotree  === nothing
+            @test cols.source       === nothing
         end
 
         @testset "resolves alternate column names" begin
@@ -113,7 +116,8 @@ make_df(d::Dict) = DataFrame(d)
                 "MtDNA"             => ["H",        "U5",           "J"],
                 "Culture"           => ["Yamnaya",  "Bell Beaker",  "Corded Ware"],
                 "Average age calBP" => [5000.0,    4000.0,         3000.0],
-                "FTDNA-Y-Haplotree" => ["R-M207>M173>M343", "I-M258>M223", "G-M201>P15"]
+                "FTDNA-Y-Haplotree" => ["R-M207>M173>M343", "I-M258>M223", "G-M201>P15"],
+                "Source"            => ["Haak2015", "Olalde2018",  "Mathieson2015"]
             ))
             df, resolve_columns(df)
         end
@@ -134,6 +138,7 @@ make_df(d::Dict) = DataFrame(d)
             @test s.culture           == "Yamnaya"
             @test s.average_age_calbp == 5000.0
             @test s.y_haplotree       == "R-M207>M173>M343"
+            @test s.source            == "Haak2015"
         end
 
         @testset "sample_number is zero-padded sequential string" begin
@@ -161,6 +166,7 @@ make_df(d::Dict) = DataFrame(d)
             @test samples[1].mtdna        == ""
             @test samples[1].culture      == ""
             @test samples[1].y_haplotree  == ""
+            @test samples[1].source       == ""
         end
 
         @testset "missing optional age is stored as missing" begin
@@ -194,8 +200,8 @@ make_df(d::Dict) = DataFrame(d)
     @testset "samples_to_geodataframe" begin
 
         samples = [
-            ArcheoSample("000001", "S1", 48.0, 16.0, "R1b", "H",  "Yamnaya",     5000.0, "R-M207>M173>M343"),
-            ArcheoSample("000002", "S2", 51.5,  0.1, "I2",  "U5", "Bell Beaker", missing, "I-M258>M223")
+            ArcheoSample("000001", "S1", 48.0, 16.0, "R1b", "H",  "Yamnaya",     5000.0, "R-M207>M173>M343", "Haak2015"),
+            ArcheoSample("000002", "S2", 51.5,  0.1, "I2",  "U5", "Bell Beaker", missing, "I-M258>M223",      "")
         ]
 
         @testset "correct row count" begin
@@ -205,7 +211,8 @@ make_df(d::Dict) = DataFrame(d)
         @testset "all expected columns present" begin
             gdf = samples_to_geodataframe(samples)
             for col in [:sample_number, :sample_id, :latitude, :longitude,
-                        :y_haplogroup, :mtdna, :culture, :average_age_calbp, :y_haplotree, :geometry]
+                        :y_haplogroup, :mtdna, :culture, :average_age_calbp,
+                        :y_haplotree, :source, :geometry]
                 @test col in propertynames(gdf)
             end
         end
@@ -216,7 +223,9 @@ make_df(d::Dict) = DataFrame(d)
             @test gdf[1, :latitude]      == 48.0
             @test gdf[1, :y_haplogroup]  == "R1b"
             @test gdf[1, :y_haplotree]   == "R-M207>M173>M343"
+            @test gdf[1, :source]        == "Haak2015"
             @test gdf[2, :sample_id]     == "S2"
+            @test gdf[2, :source]        == ""
             @test ismissing(gdf[2, :average_age_calbp])
         end
 

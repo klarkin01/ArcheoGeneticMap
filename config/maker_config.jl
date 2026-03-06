@@ -27,6 +27,7 @@ struct ColumnConfig
     culture_cols::Vector{String}
     average_age_cols::Vector{String}
     y_haplotree_cols::Vector{String}
+    source_cols::Vector{String}
 end
 
 """
@@ -43,6 +44,7 @@ const DEFAULT_CONFIGS = [
         ["MtDNA", "MT haplogroup", "mtDNA-Haplotree"],
         ["Culture", "Simplified_Culture"],
         ["Average age calBP", "Age, BP cal midpoint rescorr", "Mean_BP"],
-        ["FTDNA-Y-Haplotree", "Y-FTDNA", "FTDNA Y Haplotree"]
+        ["FTDNA-Y-Haplotree", "Y-FTDNA", "FTDNA Y Haplotree"],
+        ["Source"]
     )
 ]

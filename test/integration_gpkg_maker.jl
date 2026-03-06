@@ -35,7 +35,8 @@ const TEMP_GPKG    = joinpath(tempdir(), "test_output_$(getpid()).gpkg")
 
     @testset "expected columns are present" begin
         for col in [:sample_number, :sample_id, :latitude, :longitude,
-                    :y_haplogroup, :mtdna, :culture, :average_age_calbp, :geometry]
+                    :y_haplogroup, :mtdna, :culture, :average_age_calbp,
+                    :y_haplotree, :source, :geometry]
             @test col in propertynames(gdf)
         end
     end
@@ -49,6 +50,13 @@ const TEMP_GPKG    = joinpath(tempdir(), "test_output_$(getpid()).gpkg")
         @test row[1, :mtdna]             == "H1"
         @test row[1, :culture]           == "Bell Beaker"
         @test row[1, :average_age_calbp] ≈ 4200.0
+        @test row[1, :source]            == "Olalde2018"
+    end
+
+    @testset "missing source defaults to empty string" begin
+        # SAMPLE007 has no Source value
+        row = gdf[gdf.sample_id .== "SAMPLE007", :]
+        @test row[1, :source] == ""
     end
 
     @testset "missing optional fields default to empty string" begin

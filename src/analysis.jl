@@ -6,9 +6,9 @@ Statistical analysis functions for sample attributes and cascading filter option
 
 export calculate_date_range, calculate_date_statistics, calculate_culture_statistics
 export passes_filter, compute_available
-export compute_available_cultures, compute_available_y_haplogroups, compute_available_mtdna
+export compute_available_cultures, compute_available_y_haplogroups, compute_available_mtdna, compute_available_sources
 export compute_available_date_range, build_filter_meta
-export extract_ages, extract_unique_strings, extract_cultures, extract_y_haplogroups, extract_mtdna
+export extract_ages, extract_unique_strings, extract_cultures, extract_y_haplogroups, extract_mtdna, extract_sources
 export build_categorical_legend, build_culture_legend, build_haplogroup_legend, build_y_haplotree_legend
 export filter_haplogroups_by_search
 
@@ -79,6 +79,14 @@ Extract all unique mtDNA haplogroup values from a collection of features.
 Returns a sorted vector, excluding nothing, missing, and empty strings.
 """
 extract_mtdna(features::Vector) = extract_unique_strings(features, "mtdna")
+
+"""
+    extract_sources(features::Vector) -> Vector{String}
+
+Extract all unique source/study values from a collection of features.
+Returns a sorted vector, excluding nothing, missing, and empty strings.
+"""
+extract_sources(features::Vector) = extract_unique_strings(features, "source")
 
 # =============================================================================
 # Basic Statistics
@@ -279,10 +287,12 @@ function compute_available_cultures(features::Vector;
                                     y_haplogroup_filter::Union{YHaplogroupFilter, Nothing} = nothing,
                                     include_no_y_haplogroup::Bool = true,
                                     mtdna_filter::Union{MtdnaFilter, Nothing} = nothing,
-                                    include_no_mtdna::Bool = true)
+                                    include_no_mtdna::Bool = true,
+                                    source_filter::Union{SourceFilter, Nothing} = nothing)
     cross_filters = Tuple{AbstractSelectionFilter, Bool}[]
     y_haplogroup_filter !== nothing && push!(cross_filters, (y_haplogroup_filter, include_no_y_haplogroup))
-    mtdna_filter !== nothing && push!(cross_filters, (mtdna_filter, include_no_mtdna))
+    mtdna_filter        !== nothing && push!(cross_filters, (mtdna_filter,        include_no_mtdna))
+    source_filter       !== nothing && push!(cross_filters, (source_filter,       true))
     return compute_available(features, CultureFilter();
         date_min, date_max, include_undated, cross_filters)
 end
@@ -299,10 +309,12 @@ function compute_available_y_haplogroups(features::Vector;
                                          culture_filter::Union{CultureFilter, Nothing} = nothing,
                                          include_no_culture::Bool = true,
                                          mtdna_filter::Union{MtdnaFilter, Nothing} = nothing,
-                                         include_no_mtdna::Bool = true)
+                                         include_no_mtdna::Bool = true,
+                                         source_filter::Union{SourceFilter, Nothing} = nothing)
     cross_filters = Tuple{AbstractSelectionFilter, Bool}[]
-    culture_filter !== nothing && push!(cross_filters, (culture_filter, include_no_culture))
-    mtdna_filter !== nothing && push!(cross_filters, (mtdna_filter, include_no_mtdna))
+    culture_filter      !== nothing && push!(cross_filters, (culture_filter,      include_no_culture))
+    mtdna_filter        !== nothing && push!(cross_filters, (mtdna_filter,        include_no_mtdna))
+    source_filter       !== nothing && push!(cross_filters, (source_filter,       true))
     return compute_available(features, YHaplogroupFilter();
         date_min, date_max, include_undated, cross_filters)
 end
@@ -319,11 +331,36 @@ function compute_available_mtdna(features::Vector;
                                  culture_filter::Union{CultureFilter, Nothing} = nothing,
                                  include_no_culture::Bool = true,
                                  y_haplogroup_filter::Union{YHaplogroupFilter, Nothing} = nothing,
-                                 include_no_y_haplogroup::Bool = true)
+                                 include_no_y_haplogroup::Bool = true,
+                                 source_filter::Union{SourceFilter, Nothing} = nothing)
     cross_filters = Tuple{AbstractSelectionFilter, Bool}[]
-    culture_filter !== nothing && push!(cross_filters, (culture_filter, include_no_culture))
+    culture_filter      !== nothing && push!(cross_filters, (culture_filter,      include_no_culture))
     y_haplogroup_filter !== nothing && push!(cross_filters, (y_haplogroup_filter, include_no_y_haplogroup))
+    source_filter       !== nothing && push!(cross_filters, (source_filter,       true))
     return compute_available(features, MtdnaFilter();
+        date_min, date_max, include_undated, cross_filters)
+end
+
+"""
+    compute_available_sources(features::Vector; filters...) -> Vector{String}
+
+Compute which sources are available given date, culture, and haplogroup constraints.
+"""
+function compute_available_sources(features::Vector;
+                                   date_min::Union{Float64, Nothing} = nothing,
+                                   date_max::Union{Float64, Nothing} = nothing,
+                                   include_undated::Bool = true,
+                                   culture_filter::Union{CultureFilter, Nothing} = nothing,
+                                   include_no_culture::Bool = true,
+                                   y_haplogroup_filter::Union{YHaplogroupFilter, Nothing} = nothing,
+                                   include_no_y_haplogroup::Bool = true,
+                                   mtdna_filter::Union{MtdnaFilter, Nothing} = nothing,
+                                   include_no_mtdna::Bool = true)
+    cross_filters = Tuple{AbstractSelectionFilter, Bool}[]
+    culture_filter      !== nothing && push!(cross_filters, (culture_filter,      include_no_culture))
+    y_haplogroup_filter !== nothing && push!(cross_filters, (y_haplogroup_filter, include_no_y_haplogroup))
+    mtdna_filter        !== nothing && push!(cross_filters, (mtdna_filter,        include_no_mtdna))
+    return compute_available(features, SourceFilter();
         date_min, date_max, include_undated, cross_filters)
 end
 
@@ -465,7 +502,8 @@ function build_filter_meta(all_features::Vector,
         y_haplogroup_filter = request.y_haplogroup_filter,
         include_no_y_haplogroup = request.include_no_y_haplogroup,
         mtdna_filter = request.mtdna_filter,
-        include_no_mtdna = request.include_no_mtdna
+        include_no_mtdna = request.include_no_mtdna,
+        source_filter = request.source_filter
     )
     
     available_y_haplogroups = compute_available_y_haplogroups(
@@ -476,7 +514,8 @@ function build_filter_meta(all_features::Vector,
         culture_filter = request.culture_filter,
         include_no_culture = request.include_no_culture,
         mtdna_filter = request.mtdna_filter,
-        include_no_mtdna = request.include_no_mtdna
+        include_no_mtdna = request.include_no_mtdna,
+        source_filter = request.source_filter
     )
     
     available_mtdna = compute_available_mtdna(
@@ -487,7 +526,21 @@ function build_filter_meta(all_features::Vector,
         culture_filter = request.culture_filter,
         include_no_culture = request.include_no_culture,
         y_haplogroup_filter = request.y_haplogroup_filter,
-        include_no_y_haplogroup = request.include_no_y_haplogroup
+        include_no_y_haplogroup = request.include_no_y_haplogroup,
+        source_filter = request.source_filter
+    )
+
+    available_sources = compute_available_sources(
+        all_features,
+        date_min = request.date_min,
+        date_max = request.date_max,
+        include_undated = request.include_undated,
+        culture_filter = request.culture_filter,
+        include_no_culture = request.include_no_culture,
+        y_haplogroup_filter = request.y_haplogroup_filter,
+        include_no_y_haplogroup = request.include_no_y_haplogroup,
+        mtdna_filter = request.mtdna_filter,
+        include_no_mtdna = request.include_no_mtdna
     )
     
     # Apply search text filtering for haplogroups
@@ -542,6 +595,7 @@ function build_filter_meta(all_features::Vector,
         available_cultures,
         available_y_haplogroups,
         available_mtdna,
+        available_sources,
         filtered_y_haplogroups,
         filtered_mtdna,
         available_date_range,
