@@ -51,6 +51,7 @@ Then open http://localhost:8000 in your browser.
 - Y-haplogroup — searchable list with additive text search; select individual haplogroups to include
 - Y-haplotree — token-based filter that matches nodes in the haplotree path (e.g., entering `R-M343` matches any sample whose path contains that node); mutually exclusive with Y-haplogroup filter
 - mtDNA haplogroup — searchable list with additive text search
+- Study/source - multi-select dropdown; available options cascade
 
 **Color coding**
 - Color by age using a selectable color ramp (viridis, plasma, spectral, warm, cool, turbo)
