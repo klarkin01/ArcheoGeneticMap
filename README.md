@@ -42,7 +42,7 @@ Then open http://localhost:8000 in your browser.
 
 **Map interaction**
 - Pan, zoom, and click markers for sample details in a popup
-- Three tile layers: OpenStreetMap, OpenTopoMap, Humanitarian OSM
+- Four tile layers: OpenStreetMap, OpenTopoMap, Humanitarian OSM, Dark
 - Collapsible sidebar to maximize map space
 
 **Filtering**
