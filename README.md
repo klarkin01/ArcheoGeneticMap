@@ -351,10 +351,12 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [x] GeoPackage maker integrated into repository (standalone process)
 - [x] Fourth refactor - DRY audit
 - [x] Handle (explode) overlapping samples
-- [ ] Study
-    - [ ] filter
-    - [ ] gpkg_maker
-    - [ ] pop-up
+- [x] Study
+    - [x] filter
+    - [x] gpkg_maker
+    - [x] pop-up
+- [ ] Clean up cascading filter behavior
+- [ ] Clean up exploding samples behavior
 - [ ] 14C Method
     - [ ] filter
     - [ ] gpkg_maker
