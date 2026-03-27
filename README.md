@@ -17,7 +17,7 @@ ArcheoGeneticMap requires Julia. If you haven't used Julia before, the quickest 
 
 After installation, typing `julia` in your terminal should open the Julia REPL (an interactive prompt). That's all you need — no additional IDE is required, though [VS Code with the Julia extension](https://www.julia-vscode.org/docs/dev/gettingstarted/) is a comfortable option if you prefer an editor.
 
-> **Note on first-run startup time:** Julia JIT-compiles code on first use, so the server may take 30–60 seconds to start the first time. Subsequent runs within the same session are fast.
+> **Note on first-run startup time:** Julia JIT-compiles code on first use. On first launch the server will take 30–60 seconds to start, then run a brief query pipeline warmup (a few additional seconds) before accepting connections. You'll see `Warming up query pipeline... done` in the terminal when it's ready. Subsequent runs within the same session are fast.
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ Then open http://localhost:8000 in your browser.
 
 **Map interaction**
 - Pan, zoom, and click markers for sample details in a popup
-- Four tile layers: OpenStreetMap, OpenTopoMap, Humanitarian OSM, Dark
+- Three tile layers: OpenStreetMap, OpenTopoMap, Humanitarian OSM
 - Collapsible sidebar to maximize map space
 
 **Filtering**
@@ -80,6 +80,7 @@ This design keeps logic in Julia, makes the system easier to test, and scales we
 | `/dark` | GET | Dark OSM tiles |
 | `/api/config` | GET | Frontend configuration (color ramps, defaults, initial statistics) |
 | `/api/query` | POST | Filter and retrieve samples with colors assigned |
+| `/api/sample/:id` | GET | Full properties for a single sample (used for popup content) |
 | `/api/samples` | GET | Raw GeoJSON data (legacy) |
 | `/health` | GET | Server health check |
 
@@ -107,7 +108,7 @@ curl -X POST http://localhost:8000/api/query \
 ```
 
 Response includes:
-- `features`: GeoJSON features with `_color` property pre-assigned
+- `features`: Slim feature array — each entry contains `id`, `lon`, `lat`, and `color`. Full sample properties are fetched on demand via `/api/sample/:id` when a popup is opened.
 - `meta`: Counts, available cultures/haplogroups (for cascading filters), date statistics, and legend entries per color mode
 
 ## Module Structure
@@ -138,11 +139,11 @@ ArcheoGeneticMap/
 │   └── templates/
 │       ├── templates.jl      # Template loader and JS concatenation
 │       ├── map_base.html     # HTML shell with Alpine.js bindings
-│       ├── map_styles.css    # All CSS styling
+│       ├── map_styles.css    # All CSS styling (append new rules here; do not create separate CSS files)
 │       ├── favicon.ico       # super awesome branding
 │       ├── piecewise_scale.js # Slider scale with outlier compression
 │       ├── popup_builder.js  # Popup content builder
-│       ├── spiderify.js      # Handles overlapping samples
+│       ├── spiderifier.js    # Handles overlapping samples
 │       └── map_app.js        # Alpine.js controller + Leaflet integration
 ├── bin/
 │   ├── run_server.jl         # Map server CLI entry point
@@ -161,7 +162,7 @@ ArcheoGeneticMap/
 
 **GeoPackage maker (Julia):** `maker_config.jl` → `gpkg_maker.jl`
 
-**JavaScript:** `piecewise_scale.js` → `popup_builder.js` → `map_app.js`
+**JavaScript:** `piecewise_scale.js` → `popup_builder.js` → `spiderifier.js` → `map_app.js`
 
 ## Configuration
 
@@ -318,6 +319,7 @@ The frontend JavaScript is minimal - most logic lives server-side. The JS module
 |------|---------|
 | `piecewise_scale.js` | Slider-to-value conversion for outlier compression |
 | `popup_builder.js` | HTML popup generation for map markers |
+| `spiderifier.js` | Overlap detection and spiderification for co-located markers |
 | `map_app.js` | Alpine.js state management, API calls, Leaflet rendering |
 
 ## Data Format
@@ -355,6 +357,11 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
     - [x] filter
     - [x] gpkg_maker
     - [x] pop-up
+- [x] Performance pass
+    - [x] Canvas rendering (Leaflet SVG → Canvas, significant rendering speedup)
+    - [x] Overlap detection (O(n²) → O(n) grid-bucketed algorithm in spiderifier)
+    - [x] Response slimming (query response reduced ~70%; full properties fetched on demand)
+    - [x] JIT warmup (query pipeline pre-compiled at startup; first query now fast)
 - [ ] Clean up cascading filter behavior
 - [ ] Clean up exploding samples behavior
 - [ ] 14C Method
@@ -367,11 +374,9 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
 - [ ] SNP Count
     - [ ] gpkg_maker
     - [ ] pop-up
-- [ ] Docker build and runtime tools
+- [ ] Docker build and runtime tools (PackageCompiler system image for fast cold start)
 - [ ] Performance and scalability
-    - [ ] vector tiles
-    - [ ] dynamic clustering
-    - [ ] progressive loading
+    - [ ] vector tiles (right long-term solution for large datasets)
 - [ ] Refine popups
 - [ ] Display customization
     - [ ] Marker radius customization
