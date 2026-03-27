@@ -53,7 +53,7 @@ function initMap(config) {
     console.log('Initializing map...', config);
     
     try {
-        map = L.map('map').setView(config.map.center, config.map.zoom);
+        map = L.map('map', { preferCanvas: true }).setView(config.map.center, config.map.zoom);
         
         L.tileLayer(config.map.tileUrl, {
             attribution: config.map.tileAttribution
@@ -73,8 +73,21 @@ function initMap(config) {
 }
 
 /**
- * Update the map layer with features from server
- * Colors are already assigned by the server in feature.properties._color
+ * Fetch full properties for a single sample by id.
+ * Returns a Promise that resolves to popup HTML.
+ */
+function fetchPopupContent(id) {
+    return fetch('/api/sample/' + encodeURIComponent(id))
+        .then(function (r) { return r.json(); })
+        .then(function (props) {
+            if (props.error) return PopupBuilder.buildError(props.message);
+            return PopupBuilder.build(props);
+        });
+}
+
+/**
+ * Update the map layer with slim features from server.
+ * Each feature is { id, lon, lat, color }.
  */
 function updateMapLayer(features, defaultColor, pointRadius) {
     // Detach spiderifier before removing old layer (cleans up events and spokes)
@@ -84,40 +97,47 @@ function updateMapLayer(features, defaultColor, pointRadius) {
     if (dataLayer) {
         map.removeLayer(dataLayer);
     }
-    
-    // Create new layer
+
+    // Build a GeoJSON FeatureCollection from slim features so L.geoJSON can
+    // place markers. We attach the slim feature as layer.feature so the
+    // spiderifier can read id and color without needing full properties.
     const geojson = {
         type: 'FeatureCollection',
-        features: features
+        features: features.map(function (f) {
+            return {
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [f.lon, f.lat] },
+                // Slim properties: only what the spiderifier and renderer need
+                properties: { id: f.id, color: f.color || defaultColor }
+            };
+        })
     };
-    
+
     dataLayer = L.geoJSON(geojson, {
-        pointToLayer: function(feature, latlng) {
-            // Use server-assigned color, fall back to default
-            const color = feature.properties._color || defaultColor;
-            
+        pointToLayer: function (feature, latlng) {
+            const color = feature.properties.color || defaultColor;
             return L.circleMarker(latlng, {
-                radius: pointRadius,
-                fillColor: color,
-                color: color,
-                weight: 1,
-                opacity: 1,
+                radius     : pointRadius,
+                fillColor  : color,
+                color      : color,
+                weight     : 1,
+                opacity    : 1,
                 fillOpacity: 0.7
             });
         },
-        onEachFeature: function(feature, layer) {
-            // Popups are bound by Spiderifier after group detection:
-            //   - Solo markers get a normal click popup
-            //   - Cluster origins get no popup (click only locks/unlocks spokes)
-            //   - Spoke tips get their own popup
+        onEachFeature: function (feature, layer) {
+            // Slim feature stored on layer for spiderifier access.
+            // Shape matches what spiderifier expects: { id, color }
+            layer.feature = feature.properties;
         }
     }).addTo(map);
 
-    // Attach spiderifier to the new layer
+    // Attach spiderifier, providing the async popup fetch function
     Spiderifier.attach(map, dataLayer, {
-        pixelRadius: 8,
-        clusterThreshold: 15,
-        spokeLength: { min: 44, max: 72 }
+        pixelRadius      : 8,
+        clusterThreshold : 15,
+        spokeLength      : { min: 44, max: 72 },
+        fetchPopupContent: fetchPopupContent
     });
 }
 
@@ -389,7 +409,7 @@ function filterController() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                
+
                 const data = await response.json();
                 
                 if (data.error) {

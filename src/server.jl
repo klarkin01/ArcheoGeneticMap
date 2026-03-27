@@ -54,13 +54,34 @@ function get_cached_geojson()
     return GEOJSON_CACHE[]
 end
 
-"""
-    clear_geojson_cache()
+# Cache for sample_id → properties lookup, built from GEOJSON_CACHE on demand
+const SAMPLE_LOOKUP = Ref{Union{Dict{String, Dict{String, Any}}, Nothing}}(nothing)
 
-Clear the cached GeoJSON data. Useful for development.
 """
+    get_sample_lookup() -> Dict{String, Dict{String, Any}}
+
+Return a Dict mapping sample_id to its full properties Dict.
+Built lazily from the GeoJSON cache and invalidated when the cache is cleared.
+"""
+function get_sample_lookup()
+    if SAMPLE_LOOKUP[] === nothing
+        geojson = get_cached_geojson()
+        lookup = Dict{String, Dict{String, Any}}()
+        for feature in geojson["features"]
+            props = feature["properties"]
+            id = get(props, "sample_id", nothing)
+            if id !== nothing
+                lookup[string(id)] = props
+            end
+        end
+        SAMPLE_LOOKUP[] = lookup
+    end
+    return SAMPLE_LOOKUP[]
+end
+
 function clear_geojson_cache()
-    GEOJSON_CACHE[] = nothing
+    GEOJSON_CACHE[]      = nothing
+    SAMPLE_LOOKUP[]      = nothing
 end
 
 # =============================================================================
@@ -157,10 +178,25 @@ end
     query_response_to_dict(response::QueryResponse) -> Dict
 
 Convert a QueryResponse to a Dict for JSON serialization.
+
+Features are serialized in a slim format containing only what the frontend
+needs for rendering: sample_id (for popup fetch), coordinates, and color.
+Full sample properties are served on demand via GET /api/sample/:id.
 """
 function query_response_to_dict(response::QueryResponse)
+    slim_features = map(response.features) do feature
+        props  = feature["properties"]
+        coords = feature["geometry"]["coordinates"]
+        Dict(
+            "id"    => props["sample_id"],
+            "lon"   => coords[1],
+            "lat"   => coords[2],
+            "color" => get(props, "_color", nothing)
+        )
+    end
+
     return Dict(
-        "features" => response.features,
+        "features" => slim_features,
         "meta" => Dict(
             "totalCount" => response.meta.total_count,
             "filteredCount" => response.meta.filtered_count,
@@ -315,11 +351,11 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
             if payload === nothing
                 payload = Dict()
             end
-            
+
             request = parse_filter_request(payload)
             geojson = get_cached_geojson()
             response = process_query(geojson, request)
-            
+
             return json(query_response_to_dict(response))
         catch e
             @error "Error processing query" exception=(e, catch_backtrace())
@@ -330,6 +366,19 @@ function setup_routes(; default_settings::MapSettings = MapSettings())
         end
     end
     
+    # Single sample properties endpoint — used for on-demand popup content
+    route("/api/sample/:id") do
+        sample_id = params(:id)
+        lookup    = get_sample_lookup()
+        props     = get(lookup, sample_id, nothing)
+        if props === nothing
+            return json(Dict("error" => true, "message" => "Sample not found: $sample_id"))
+        end
+        # Return properties without the internal _color field
+        public_props = filter(kv -> kv.first != "_color", props)
+        return json(public_props)
+    end
+
     # Legacy endpoints
     route("/api/samples") do
         geojson = get_cached_geojson()
@@ -392,6 +441,36 @@ function start_server(port::Int = 8000; async::Bool = false)
 end
 
 """
+    warmup_query_pipeline()
+
+Force JIT compilation of the full query pipeline before the server starts
+accepting requests. Julia compiles functions on first call; without this,
+the first user query bears the compilation cost (~1–2 seconds). After warmup,
+all query code paths are compiled and subsequent queries complete in ~50–150ms.
+
+Called automatically by `serve_map` between route setup and server start.
+"""
+function warmup_query_pipeline()
+    print("Warming up query pipeline...")
+    t0 = time_ns()
+
+    geojson = get_cached_geojson()
+
+    # Warm up config response (exercises date stats, bounds, culture stats)
+    build_config_response()
+
+    # Warm up query pipeline with a default (unfiltered) request
+    # This compiles apply_filters, build_filter_meta, assign_colors!,
+    # query_response_to_dict, and all their callees
+    request = FilterRequest()
+    result  = process_query(geojson, request)
+    query_response_to_dict(result)
+
+    elapsed = round((time_ns() - t0) / 1e9, digits=1)
+    println(" done ($(elapsed)s)")
+end
+
+"""
     serve_map(filepath::String; port::Int = 8000, settings::MapSettings = MapSettings())
 
 Convenience function to configure and start the mapping server.
@@ -399,5 +478,6 @@ Convenience function to configure and start the mapping server.
 function serve_map(filepath::String; port::Int = 8000, settings::MapSettings = MapSettings())
     configure_data_source(filepath)
     setup_routes(default_settings = settings)
+    warmup_query_pipeline()
     start_server(port)
 end

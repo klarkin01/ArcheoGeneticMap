@@ -1,0 +1,16 @@
+/* ==========================================================================
+   Popup loading / error states (on-demand sample fetch)
+   ========================================================================== */
+
+.popup-loading {
+    color: #6c757d;
+    font-style: italic;
+    font-size: 13px;
+    padding: 4px 0;
+}
+
+.popup-error {
+    color: #dc3545;
+    font-size: 13px;
+    padding: 4px 0;
+}

@@ -222,12 +222,33 @@ const PopupBuilder = (function() {
         }
     };
     
+    /**
+     * Build a loading state popup (shown while sample properties are fetching)
+     * @returns {string} HTML string
+     */
+    function buildLoading() {
+        return '<div class="popup-loading">Loading\u2026</div>';
+    }
+
+    /**
+     * Build an error state popup
+     * @param {string} [message] - Optional error detail
+     * @returns {string} HTML string
+     */
+    function buildError(message) {
+        return '<div class="popup-error">Could not load sample'
+            + (message ? ': ' + escapeHtml(message) : '')
+            + '</div>';
+    }
+
     // =========================================================================
     // Export Public API
     // =========================================================================
     
     return {
         build,
+        buildLoading,
+        buildError,
         createBuilder,
         getDefaultFields,
         formatters,

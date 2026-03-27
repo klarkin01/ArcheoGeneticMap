@@ -59,8 +59,13 @@ const Spiderifier = (function () {
             opacity   : 0.7,
             dashArray : '3,3'
         },
-        dismissDelay : 150,
-        markerRadius : 5
+        dismissDelay     : 150,
+        markerRadius     : 5,
+        // Async function (id: string) => Promise<string> that returns popup HTML.
+        // Must be provided by the caller; defaults to a stub that shows an error.
+        fetchPopupContent: function (id) {
+            return Promise.resolve(PopupBuilder.buildError('fetchPopupContent not configured'));
+        }
     };
 
     // =========================================================================
@@ -137,21 +142,46 @@ const Spiderifier = (function () {
     /**
      * Bind popups to solo markers (not part of any cluster).
      * Cluster origin markers intentionally get no popup — click only locks spokes.
-     * Called after _rebuildGroups so _spiderGroup is set on every layer.
+     * Popups are populated asynchronously when opened to avoid fetching content
+     * for markers the user never clicks.
      */
     function _bindSoloPopups() {
         _dataLayer.eachLayer(function (layer) {
-            // Remove any previously bound popup first (handles zoom-triggered rebind)
             layer.unbindPopup();
 
             if (!layer._spiderGroup) {
-                // Solo marker — bind normal popup
                 const feature = _layerFeatureMap.get(layer);
                 if (feature) {
-                    layer.bindPopup(PopupBuilder.build(feature.properties));
+                    _bindAsyncPopup(layer, feature.id);
                 }
             }
-            // Cluster origins: no popup bound — click is handled by _onMarkerClick
+        });
+    }
+
+    /**
+     * Bind a popup to a layer that fetches its content on first open.
+     * Shows a loading state immediately, then fills in the real content.
+     * Subsequent opens reuse the already-fetched content.
+     *
+     * @param {L.Layer} layer   - The Leaflet layer to bind the popup to
+     * @param {string}  id      - The sample_id for the fetch
+     */
+    function _bindAsyncPopup(layer, id) {
+        const popup = L.popup();
+        layer.bindPopup(popup);
+
+        let fetched = false;
+
+        layer.on('popupopen', function () {
+            if (fetched) return;
+            popup.setContent(PopupBuilder.buildLoading());
+            _options.fetchPopupContent(id).then(function (html) {
+                fetched = true;
+                popup.setContent(html);
+            }).catch(function (err) {
+                popup.setContent(PopupBuilder.buildError());
+                console.error('Popup fetch failed for', id, err);
+            });
         });
     }
 
@@ -318,8 +348,7 @@ const Spiderifier = (function () {
 
             // Tip marker — keeps original server-assigned color
             const feature = _layerFeatureMap.get(markerLayer);
-            const color   = (feature && feature.properties && feature.properties._color)
-                           || '#e41a1c';
+            const color   = (feature && feature.color) || '#e41a1c';
 
             const tip = L.circleMarker(tipLL, {
                 radius      : _options.markerRadius,
@@ -332,7 +361,7 @@ const Spiderifier = (function () {
             });
 
             if (feature) {
-                tip.bindPopup(PopupBuilder.build(feature.properties));
+                _bindAsyncPopup(tip, feature.id);
             }
 
             // Hover over spokes/tips keeps the spider alive (when unlocked)
@@ -389,11 +418,8 @@ const Spiderifier = (function () {
         let rows = '';
         layers.forEach(function (markerLayer, i) {
             const feature  = _layerFeatureMap.get(markerLayer);
-            const props    = (feature && feature.properties) || {};
-            const sampleId = props.sample_id
-                           || props['Object-ID']
-                           || ('Sample ' + (i + 1));
-            const color    = props._color || '#e41a1c';
+            const sampleId = (feature && feature.id) || ('Sample ' + (i + 1));
+            const color    = (feature && feature.color) || '#e41a1c';
             const dot      = '<span class="spider-popup-dot" '
                            + 'style="background:' + _escapeHtml(color) + '"></span>';
             rows += '<tr class="spider-popup-row" data-idx="' + i + '">'
@@ -450,12 +476,17 @@ const Spiderifier = (function () {
 
                     const feature = _layerFeatureMap.get(targetLayer);
                     if (feature) {
-                        // Open individual popup at that sample's location
-                        // Summary popup stays open (autoClose: false)
-                        L.popup()
+                        const popup = L.popup()
                             .setLatLng(targetLayer.getLatLng())
-                            .setContent(PopupBuilder.build(feature.properties))
+                            .setContent(PopupBuilder.buildLoading())
                             .openOn(_map);
+
+                        _options.fetchPopupContent(feature.id).then(function (html) {
+                            popup.setContent(html);
+                        }).catch(function (err) {
+                            popup.setContent(PopupBuilder.buildError());
+                            console.error('Popup fetch failed for', feature.id, err);
+                        });
                     }
                 });
             });
