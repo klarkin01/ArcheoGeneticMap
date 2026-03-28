@@ -120,35 +120,53 @@
                     </div>
                     <div class="filter-body" x-show="sections.culture">
                         <div class="culture-container">
-                            <!-- Multi-select dropdown -->
-                            <label class="filter-label">Select Cultures</label>
-                            <div class="multi-select-wrapper">
-                                <div class="multi-select-toggle" @click="cultureDropdownOpen = !cultureDropdownOpen">
-                                    <span x-text="selectedCulturesSummary()"></span>
-                                    <span class="chevron" :class="{ 'collapsed': !cultureDropdownOpen }">&#x25BC;</span>
-                                </div>
-                                <div class="multi-select-dropdown" x-show="cultureDropdownOpen" @click.away="cultureDropdownOpen = false">
-                                    <!-- Select All option -->
-                                    <label class="multi-select-option select-all">
-                                        <input type="checkbox" 
-                                            :checked="allCulturesSelected"
-                                            @change="toggleAllCultures()">
-                                        <span>All</span>
-                                    </label>
-                                    <div class="multi-select-divider"></div>
-                                    <!-- Individual culture options -->
-                                    <template x-for="culture in availableCultures" :key="culture">
-                                        <label class="multi-select-option">
-                                            <input type="checkbox" 
-                                                :value="culture"
-                                                :checked="isCultureSelected(culture)"
-                                                @change="toggleCulture(culture)">
-                                            <span x-text="culture"></span>
+                            <!-- Filter on/off toggle -->
+                            <div class="filter-toggle-row">
+                                <label class="filter-toggle-option">
+                                    <input type="radio" name="cultureFilterActive"
+                                        :checked="!cultureFilterActive"
+                                        @change="if (cultureFilterActive) toggleCultureFilter()">
+                                    <span>Off</span>
+                                </label>
+                                <label class="filter-toggle-option">
+                                    <input type="radio" name="cultureFilterActive"
+                                        :checked="cultureFilterActive"
+                                        @change="if (!cultureFilterActive) toggleCultureFilter()">
+                                    <span>On</span>
+                                </label>
+                            </div>
+
+                            <!-- Multi-select dropdown (only when filter is on) -->
+                            <div x-show="cultureFilterActive" x-transition>
+                                <label class="filter-label">Select Cultures</label>
+                                <div class="multi-select-wrapper">
+                                    <div class="multi-select-toggle" @click="cultureDropdownOpen = !cultureDropdownOpen">
+                                        <span x-text="selectedCulturesSummary()"></span>
+                                        <span class="chevron" :class="{ 'collapsed': !cultureDropdownOpen }">&#x25BC;</span>
+                                    </div>
+                                    <div class="multi-select-dropdown" x-show="cultureDropdownOpen" @click.away="cultureDropdownOpen = false">
+                                        <!-- Select All option -->
+                                        <label class="multi-select-option select-all">
+                                            <input type="checkbox"
+                                                :checked="allCulturesSelected"
+                                                @change="toggleAllCultures()">
+                                            <span>All</span>
                                         </label>
-                                    </template>
+                                        <div class="multi-select-divider"></div>
+                                        <!-- Individual culture options -->
+                                        <template x-for="culture in availableCultures" :key="culture">
+                                            <label class="multi-select-option">
+                                                <input type="checkbox"
+                                                    :value="culture"
+                                                    :checked="isCultureSelected(culture)"
+                                                    @change="toggleCulture(culture)">
+                                                <span x-text="culture"></span>
+                                            </label>
+                                        </template>
+                                    </div>
                                 </div>
                             </div>
-                            
+
                             <div class="checkbox-row">
                                 <input type="checkbox" 
                                     id="includeNoCulture" 
@@ -193,7 +211,7 @@
                                 </div>
                             </div>
                             
-                            <div class="stats">
+                            <div class="stats" x-show="cultureFilterActive">
                                 <span x-text="selectedCultures.length"></span> of <span x-text="availableCultures.length"></span> cultures selected
                             </div>
                         </div>
@@ -208,46 +226,65 @@
                     </div>
                     <div class="filter-body" x-show="sections.yHaplogroup">
                         <div class="haplogroup-container">
-                            <!-- Search input -->
-                            <label class="filter-label">Search Haplogroups</label>
-                            <div class="search-input-wrapper">
-                                <input type="text" 
-                                       class="search-input" 
-                                       x-model="yHaplogroupSearchText"
-                                       @keyup.enter="onYHaplogroupSearch()"
-                                       placeholder="Type prefix and press Enter (e.g., R)">
-                                <button class="search-button" @click="onYHaplogroupSearch()">Search</button>
+                            <!-- Filter on/off toggle -->
+                            <div class="filter-toggle-row">
+                                <label class="filter-toggle-option">
+                                    <input type="radio" name="yHaplogroupFilterActive"
+                                        :checked="!yHaplogroupFilterActive"
+                                        @change="if (yHaplogroupFilterActive) toggleYHaplogroupFilter()">
+                                    <span>Off</span>
+                                </label>
+                                <label class="filter-toggle-option">
+                                    <input type="radio" name="yHaplogroupFilterActive"
+                                        :checked="yHaplogroupFilterActive"
+                                        @change="if (!yHaplogroupFilterActive) toggleYHaplogroupFilter()">
+                                    <span>On</span>
+                                </label>
                             </div>
-                            
-                            <!-- Multi-select dropdown -->
-                            <label class="filter-label">Select Haplogroups</label>
-                            <div class="multi-select-wrapper">
-                                <div class="multi-select-toggle" @click="yHaplogroupDropdownOpen = !yHaplogroupDropdownOpen">
-                                    <span x-text="selectedYHaplogroupsSummary()"></span>
-                                    <span class="chevron" :class="{ 'collapsed': !yHaplogroupDropdownOpen }">&#x25BC;</span>
+
+                            <!-- Search and multi-select (only when filter is on) -->
+                            <div x-show="yHaplogroupFilterActive" x-transition>
+                                <!-- Search input -->
+                                <label class="filter-label">Search Haplogroups</label>
+                                <div class="search-input-wrapper">
+                                    <input type="text"
+                                           class="search-input"
+                                           x-model="yHaplogroupSearchText"
+                                           @keyup.enter="onYHaplogroupSearch()"
+                                           placeholder="Type prefix and press Enter (e.g., R)">
+                                    <button class="search-button" @click="onYHaplogroupSearch()">Search</button>
                                 </div>
-                                <div class="multi-select-dropdown" x-show="yHaplogroupDropdownOpen" @click.away="yHaplogroupDropdownOpen = false">
-                                    <!-- Select All option -->
-                                    <label class="multi-select-option select-all">
-                                        <input type="checkbox" 
-                                            :checked="allYHaplogroupsSelected"
-                                            @change="toggleAllYHaplogroups()">
-                                        <span>All</span>
-                                    </label>
-                                    <div class="multi-select-divider"></div>
-                                    <!-- Individual haplogroup options -->
-                                    <template x-for="haplogroup in availableYHaplogroups" :key="haplogroup">
-                                        <label class="multi-select-option">
-                                            <input type="checkbox" 
-                                                :value="haplogroup"
-                                                :checked="isYHaplogroupSelected(haplogroup)"
-                                                @change="toggleYHaplogroup(haplogroup)">
-                                            <span x-text="haplogroup"></span>
+
+                                <!-- Multi-select dropdown -->
+                                <label class="filter-label">Select Haplogroups</label>
+                                <div class="multi-select-wrapper">
+                                    <div class="multi-select-toggle" @click="yHaplogroupDropdownOpen = !yHaplogroupDropdownOpen">
+                                        <span x-text="selectedYHaplogroupsSummary()"></span>
+                                        <span class="chevron" :class="{ 'collapsed': !yHaplogroupDropdownOpen }">&#x25BC;</span>
+                                    </div>
+                                    <div class="multi-select-dropdown" x-show="yHaplogroupDropdownOpen" @click.away="yHaplogroupDropdownOpen = false">
+                                        <!-- Select All option -->
+                                        <label class="multi-select-option select-all">
+                                            <input type="checkbox"
+                                                :checked="allYHaplogroupsSelected"
+                                                @change="toggleAllYHaplogroups()">
+                                            <span>All</span>
                                         </label>
-                                    </template>
+                                        <div class="multi-select-divider"></div>
+                                        <!-- Individual haplogroup options -->
+                                        <template x-for="haplogroup in availableYHaplogroups" :key="haplogroup">
+                                            <label class="multi-select-option">
+                                                <input type="checkbox"
+                                                    :value="haplogroup"
+                                                    :checked="isYHaplogroupSelected(haplogroup)"
+                                                    @change="toggleYHaplogroup(haplogroup)">
+                                                <span x-text="haplogroup"></span>
+                                            </label>
+                                        </template>
+                                    </div>
                                 </div>
                             </div>
-                            
+
                             <div class="checkbox-row">
                                 <input type="checkbox" 
                                     id="includeNoYHaplogroup" 
@@ -292,7 +329,7 @@
                                 </div>
                             </div>
                             
-                            <div class="stats">
+                            <div class="stats" x-show="yHaplogroupFilterActive">
                                 <span x-text="selectedYHaplogroups.length"></span> of <span x-text="availableYHaplogroups.length"></span> haplogroups selected
                             </div>
                         </div>
@@ -307,46 +344,65 @@
                     </div>
                     <div class="filter-body" x-show="sections.mtdna">
                         <div class="haplogroup-container">
-                            <!-- Search input -->
-                            <label class="filter-label">Search Haplogroups</label>
-                            <div class="search-input-wrapper">
-                                <input type="text" 
-                                       class="search-input" 
-                                       x-model="mtdnaSearchText"
-                                       @keyup.enter="onMtdnaSearch()"
-                                       placeholder="Type prefix and press Enter (e.g., H)">
-                                <button class="search-button" @click="onMtdnaSearch()">Search</button>
+                            <!-- Filter on/off toggle -->
+                            <div class="filter-toggle-row">
+                                <label class="filter-toggle-option">
+                                    <input type="radio" name="mtdnaFilterActive"
+                                        :checked="!mtdnaFilterActive"
+                                        @change="if (mtdnaFilterActive) toggleMtdnaFilter()">
+                                    <span>Off</span>
+                                </label>
+                                <label class="filter-toggle-option">
+                                    <input type="radio" name="mtdnaFilterActive"
+                                        :checked="mtdnaFilterActive"
+                                        @change="if (!mtdnaFilterActive) toggleMtdnaFilter()">
+                                    <span>On</span>
+                                </label>
                             </div>
-                            
-                            <!-- Multi-select dropdown -->
-                            <label class="filter-label">Select Haplogroups</label>
-                            <div class="multi-select-wrapper">
-                                <div class="multi-select-toggle" @click="mtdnaDropdownOpen = !mtdnaDropdownOpen">
-                                    <span x-text="selectedMtdnaSummary()"></span>
-                                    <span class="chevron" :class="{ 'collapsed': !mtdnaDropdownOpen }">&#x25BC;</span>
+
+                            <!-- Search and multi-select (only when filter is on) -->
+                            <div x-show="mtdnaFilterActive" x-transition>
+                                <!-- Search input -->
+                                <label class="filter-label">Search Haplogroups</label>
+                                <div class="search-input-wrapper">
+                                    <input type="text"
+                                           class="search-input"
+                                           x-model="mtdnaSearchText"
+                                           @keyup.enter="onMtdnaSearch()"
+                                           placeholder="Type prefix and press Enter (e.g., H)">
+                                    <button class="search-button" @click="onMtdnaSearch()">Search</button>
                                 </div>
-                                <div class="multi-select-dropdown" x-show="mtdnaDropdownOpen" @click.away="mtdnaDropdownOpen = false">
-                                    <!-- Select All option -->
-                                    <label class="multi-select-option select-all">
-                                        <input type="checkbox" 
-                                            :checked="allMtdnaSelected"
-                                            @change="toggleAllMtdna()">
-                                        <span>All</span>
-                                    </label>
-                                    <div class="multi-select-divider"></div>
-                                    <!-- Individual haplogroup options -->
-                                    <template x-for="mtdna in availableMtdna" :key="mtdna">
-                                        <label class="multi-select-option">
-                                            <input type="checkbox" 
-                                                :value="mtdna"
-                                                :checked="isMtdnaSelected(mtdna)"
-                                                @change="toggleMtdna(mtdna)">
-                                            <span x-text="mtdna"></span>
+
+                                <!-- Multi-select dropdown -->
+                                <label class="filter-label">Select Haplogroups</label>
+                                <div class="multi-select-wrapper">
+                                    <div class="multi-select-toggle" @click="mtdnaDropdownOpen = !mtdnaDropdownOpen">
+                                        <span x-text="selectedMtdnaSummary()"></span>
+                                        <span class="chevron" :class="{ 'collapsed': !mtdnaDropdownOpen }">&#x25BC;</span>
+                                    </div>
+                                    <div class="multi-select-dropdown" x-show="mtdnaDropdownOpen" @click.away="mtdnaDropdownOpen = false">
+                                        <!-- Select All option -->
+                                        <label class="multi-select-option select-all">
+                                            <input type="checkbox"
+                                                :checked="allMtdnaSelected"
+                                                @change="toggleAllMtdna()">
+                                            <span>All</span>
                                         </label>
-                                    </template>
+                                        <div class="multi-select-divider"></div>
+                                        <!-- Individual haplogroup options -->
+                                        <template x-for="mtdna in availableMtdna" :key="mtdna">
+                                            <label class="multi-select-option">
+                                                <input type="checkbox"
+                                                    :value="mtdna"
+                                                    :checked="isMtdnaSelected(mtdna)"
+                                                    @change="toggleMtdna(mtdna)">
+                                                <span x-text="mtdna"></span>
+                                            </label>
+                                        </template>
+                                    </div>
                                 </div>
                             </div>
-                            
+
                             <div class="checkbox-row">
                                 <input type="checkbox" 
                                     id="includeNoMtdna" 
@@ -391,7 +447,7 @@
                                 </div>
                             </div>
                             
-                            <div class="stats">
+                            <div class="stats" x-show="mtdnaFilterActive">
                                 <span x-text="selectedMtdna.length"></span> of <span x-text="availableMtdna.length"></span> haplogroups selected
                             </div>
                         </div>
@@ -480,36 +536,54 @@
                     </div>
                     <div class="filter-body" x-show="sections.source">
                         <div class="culture-container">
-                            <!-- Multi-select dropdown -->
-                            <label class="filter-label">Select Studies</label>
-                            <div class="multi-select-wrapper">
-                                <div class="multi-select-toggle" @click="sourceDropdownOpen = !sourceDropdownOpen">
-                                    <span x-text="selectedSourcesSummary()"></span>
-                                    <span class="chevron" :class="{ 'collapsed': !sourceDropdownOpen }">&#x25BC;</span>
-                                </div>
-                                <div class="multi-select-dropdown" x-show="sourceDropdownOpen" @click.away="sourceDropdownOpen = false">
-                                    <!-- Select All option -->
-                                    <label class="multi-select-option select-all">
-                                        <input type="checkbox"
-                                            :checked="allSourcesSelected"
-                                            @change="toggleAllSources()">
-                                        <span>All</span>
-                                    </label>
-                                    <div class="multi-select-divider"></div>
-                                    <!-- Individual source options -->
-                                    <template x-for="source in availableSources" :key="source">
-                                        <label class="multi-select-option">
+                            <!-- Filter on/off toggle -->
+                            <div class="filter-toggle-row">
+                                <label class="filter-toggle-option">
+                                    <input type="radio" name="sourceFilterActive"
+                                        :checked="!sourceFilterActive"
+                                        @change="if (sourceFilterActive) toggleSourceFilter()">
+                                    <span>Off</span>
+                                </label>
+                                <label class="filter-toggle-option">
+                                    <input type="radio" name="sourceFilterActive"
+                                        :checked="sourceFilterActive"
+                                        @change="if (!sourceFilterActive) toggleSourceFilter()">
+                                    <span>On</span>
+                                </label>
+                            </div>
+
+                            <!-- Multi-select dropdown (only when filter is on) -->
+                            <div x-show="sourceFilterActive" x-transition>
+                                <label class="filter-label">Select Studies</label>
+                                <div class="multi-select-wrapper">
+                                    <div class="multi-select-toggle" @click="sourceDropdownOpen = !sourceDropdownOpen">
+                                        <span x-text="selectedSourcesSummary()"></span>
+                                        <span class="chevron" :class="{ 'collapsed': !sourceDropdownOpen }">&#x25BC;</span>
+                                    </div>
+                                    <div class="multi-select-dropdown" x-show="sourceDropdownOpen" @click.away="sourceDropdownOpen = false">
+                                        <!-- Select All option -->
+                                        <label class="multi-select-option select-all">
                                             <input type="checkbox"
-                                                :value="source"
-                                                :checked="isSourceSelected(source)"
-                                                @change="toggleSource(source)">
-                                            <span x-text="source"></span>
+                                                :checked="allSourcesSelected"
+                                                @change="toggleAllSources()">
+                                            <span>All</span>
                                         </label>
-                                    </template>
+                                        <div class="multi-select-divider"></div>
+                                        <!-- Individual source options -->
+                                        <template x-for="source in availableSources" :key="source">
+                                            <label class="multi-select-option">
+                                                <input type="checkbox"
+                                                    :value="source"
+                                                    :checked="isSourceSelected(source)"
+                                                    @change="toggleSource(source)">
+                                                <span x-text="source"></span>
+                                            </label>
+                                        </template>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div class="stats">
+                            <div class="stats" x-show="sourceFilterActive">
                                 <span x-text="selectedSources.length"></span> of <span x-text="availableSources.length"></span> studies selected
                             </div>
                         </div>

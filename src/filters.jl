@@ -50,19 +50,28 @@ end
 Filter features by any selection-based filter. Dispatches on filter type to
 determine which GeoJSON property key to check via `property_key(filter)`.
 
-A feature is included when:
-- Its property value is in `filter.selected`, OR
-- Its property value is absent and `include_missing` is true
+Behaviour depends on `filter.active`:
+- `active = false` → filter is off; all features pass through unconditionally
+- `active = true, selected = []` → filter is on but nothing selected; return empty
+- `active = true, selected = [...]` → include features whose property value is in
+  `selected`, plus features with a missing value if `include_missing` is true
 
-Adding a new selection filter type requires only a new struct, a `property_key`
-method, and a named wrapper below — this function needs no changes.
+Adding a new selection filter type requires only a new struct with `active` and
+`selected` fields, a `property_key` method, and a named wrapper below — this
+function needs no changes.
 """
 function apply_filter(features::Vector,
                       filter::AbstractSelectionFilter,
                       include_missing::Bool)
+    # Filter is off — all features pass through unconditionally.
+    if !filter.active
+        return features
+    end
+
     selected = Set(filter.selected)
     key = property_key(filter)
 
+    # Filter is on but nothing selected — nothing passes.
     if isempty(selected) && !include_missing
         return Dict{String, Any}[]
     end
