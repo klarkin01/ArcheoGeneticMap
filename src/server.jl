@@ -254,8 +254,8 @@ function build_config_response()
     
     date_stats = calculate_date_statistics(geojson)
     culture_stats = calculate_culture_statistics(geojson)
-#    bounds = calculate_bounds(geojson, DEFAULT_PADDING)
-#    center_lat, center_lon = calculate_center(bounds)
+    bounds = calculate_bounds(geojson, DEFAULT_PADDING)
+    center_lat, center_lon = calculate_center(bounds)
     
     # Extract all haplogroups for initial display
     all_y_haplogroups = extract_y_haplogroups(geojson["features"])
