@@ -362,7 +362,7 @@ ArcheoGeneticMap expects GeoPackage files with point geometry and these attribut
     - [x] Overlap detection (O(n²) → O(n) grid-bucketed algorithm in spiderifier)
     - [x] Response slimming (query response reduced ~70%; full properties fetched on demand)
     - [x] JIT warmup (query pipeline pre-compiled at startup; first query now fast)
-- [ ] Clean up cascading filter behavior
+- [x] Clean up cascading filter behavior
 - [ ] Clean up exploding samples behavior
 - [ ] 14C Method
     - [ ] filter
