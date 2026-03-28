@@ -74,7 +74,7 @@ function initMap(config) {
     console.log('Initializing map...', config);
     
     try {
-        map = L.map('map', { preferCanvas: true }).setView(config.map.center, config.map.zoom);
+        map = L.map('map', { preferCanvas: true, worldCopyJump: true }).setView(config.map.center, config.map.zoom);
         
         L.tileLayer(config.map.tileUrl, {
             attribution: config.map.tileAttribution
@@ -127,7 +127,8 @@ function updateMapLayer(features, defaultColor, pointRadius) {
         features: features.map(function (f) {
             return {
                 type: 'Feature',
-                geometry: { type: 'Point', coordinates: [f.lon, f.lat] },
+                //geometry: { type: 'Point', coordinates: [f.lon, f.lat] },
+                geometry: { type: 'Point', coordinates: [f.lon < -27 ? f.lon +360 : f.lon, f.lat] },
                 // Slim properties: only what the spiderifier and renderer need
                 properties: { id: f.id, color: f.color || defaultColor }
             };

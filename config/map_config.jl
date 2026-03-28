@@ -13,7 +13,7 @@ Contains only constants and default values, no logic.
 const DEFAULT_PADDING = 5.0
 
 "Default initial zoom level (1-18)"
-const DEFAULT_ZOOM = 6
+const DEFAULT_ZOOM = 3
 
 "Default marker color (CSS hex)"
 const DEFAULT_POINT_COLOR = "#e41a1c"
