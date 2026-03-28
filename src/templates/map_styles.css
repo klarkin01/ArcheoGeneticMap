@@ -686,3 +686,24 @@ body {
     opacity: 0.7;
     vertical-align: middle;
 }
+
+/* Filter on/off toggle row */
+.filter-toggle-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 10px;
+}
+
+.filter-toggle-option {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary, #ccc);
+}
+
+.filter-toggle-option input[type="radio"] {
+    cursor: pointer;
+    accent-color: var(--accent, #4a9eff);
+}

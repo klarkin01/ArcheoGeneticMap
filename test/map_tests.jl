@@ -40,17 +40,20 @@ using .ArcheoGeneticMap
         @test date_stats.p98 == 9000.0
         
         # Test CultureFilter construction
-        # CultureFilter has a single `selected` field (no mode).
-        # Empty selected = no cultures explicitly chosen.
+        # CultureFilter now has active::Bool and selected::Vector{String}.
+        # Default constructor: active=false (filter off), empty selected.
         cf_empty = CultureFilter()
+        @test cf_empty.active == false
         @test isempty(cf_empty.selected)
         
-        cf_selected = CultureFilter(["Yamnaya", "Bell Beaker"])
+        cf_selected = CultureFilter(true, ["Yamnaya", "Bell Beaker"])
+        @test cf_selected.active == true
         @test length(cf_selected.selected) == 2
         @test "Yamnaya" in cf_selected.selected
         @test "Bell Beaker" in cf_selected.selected
         
-        cf_explicit_empty = CultureFilter(String[])
+        cf_explicit_empty = CultureFilter(true, String[])
+        @test cf_explicit_empty.active == true
         @test isempty(cf_explicit_empty.selected)
         
         # Test FilterRequest construction with defaults
@@ -58,6 +61,7 @@ using .ArcheoGeneticMap
         @test fr.date_min === nothing
         @test fr.date_max === nothing
         @test fr.include_undated == true
+        @test fr.culture_filter.active == false
         @test isempty(fr.culture_filter.selected)
         @test fr.color_ramp == "viridis"
         @test isempty(fr.y_haplotree_filter.terms)
@@ -76,13 +80,14 @@ using .ArcheoGeneticMap
             date_min = 5000.0,
             date_max = 10000.0,
             include_undated = false,
-            culture_filter = CultureFilter(["Yamnaya"]),
+            culture_filter = CultureFilter(true, ["Yamnaya"]),
             color_by = :age
         )
         @test fr_custom.date_min == 5000.0
         @test fr_custom.date_max == 10000.0
         @test fr_custom.include_undated == false
         @test fr_custom.color_by == :age
+        @test fr_custom.culture_filter.active == true
         @test "Yamnaya" in fr_custom.culture_filter.selected
     end
     
@@ -160,31 +165,36 @@ using .ArcheoGeneticMap
         filtered = apply_date_filter(features, nothing, nothing, true)
         @test length(filtered) == 5
         
-        # Test culture filter - empty selected, include_no_culture=true
-        # Empty selected means no named cultures pass the filter (isempty → return false for cultured)
-        # Only no-culture samples pass when include_no_culture=true
+        # Test culture filter - inactive (filter off) → all 5 features pass regardless of include flag
         filtered = apply_culture_filter(features, CultureFilter(), true)
-        @test length(filtered) == 1  # Only the no-culture (6000) sample
-        
-        # Test culture filter - empty selected, include_no_culture=false → nothing passes
+        @test length(filtered) == 5
         filtered = apply_culture_filter(features, CultureFilter(), false)
+        @test length(filtered) == 5
+
+        # Test culture filter - active, empty selected, include_no_culture=true
+        # Filter is on but nothing selected: only no-culture samples pass
+        filtered = apply_culture_filter(features, CultureFilter(true, String[]), true)
+        @test length(filtered) == 1  # Only the no-culture (6000) sample
+
+        # Test culture filter - active, empty selected, include_no_culture=false → nothing passes
+        filtered = apply_culture_filter(features, CultureFilter(true, String[]), false)
         @test length(filtered) == 0
-        
-        # Test culture filter - selected cultures, include_no_culture=false
-        filtered = apply_culture_filter(features, CultureFilter(["Yamnaya"]), false)
+
+        # Test culture filter - active, selected cultures, include_no_culture=false
+        filtered = apply_culture_filter(features, CultureFilter(true, ["Yamnaya"]), false)
         @test length(filtered) == 2  # Two Yamnaya samples
-        
-        # Test culture filter - selected + include_no_culture
-        filtered = apply_culture_filter(features, CultureFilter(["Yamnaya"]), true)
+
+        # Test culture filter - active, selected + include_no_culture
+        filtered = apply_culture_filter(features, CultureFilter(true, ["Yamnaya"]), true)
         @test length(filtered) == 3  # Two Yamnaya + one no-culture sample
-        
+
         # Test combined filters via FilterRequest
         # date 4000-9000, no undated, Yamnaya + Bell Beaker cultures, no no-culture samples
         request = FilterRequest(
             date_min = 4000.0,
             date_max = 9000.0,
             include_undated = false,
-            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+            culture_filter = CultureFilter(true, ["Yamnaya", "Bell Beaker"]),
             include_no_culture = false
         )
         filtered = apply_filters(features, request)
@@ -333,15 +343,8 @@ using .ArcheoGeneticMap
             )
         ]
         
-        # Test process_query with default request.
-        # Default CultureFilter() is empty; default include_no_culture=true.
-        # Empty selected + include_no_culture=true → only no-culture samples pass culture filter.
-        # Neither feature has no culture, so filtered_count = 0.
-        # To get all features, explicitly select both cultures.
-        request_all = FilterRequest(
-            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
-            include_no_culture = false
-        )
+        # Test process_query with default request (filter inactive = all pass).
+        request_all = FilterRequest()
         response = process_query(features, request_all)
         
         @test response.meta.total_count == 2
@@ -354,7 +357,7 @@ using .ArcheoGeneticMap
         
         # Test with color by age
         request_age = FilterRequest(
-            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+            culture_filter = CultureFilter(true, ["Yamnaya", "Bell Beaker"]),
             include_no_culture = false,
             color_by = :age
         )
@@ -363,7 +366,7 @@ using .ArcheoGeneticMap
         
         # Test with color by culture
         request_culture = FilterRequest(
-            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+            culture_filter = CultureFilter(true, ["Yamnaya", "Bell Beaker"]),
             include_no_culture = false,
             color_by = :culture
         )
@@ -379,7 +382,7 @@ using .ArcheoGeneticMap
         request_filtered = FilterRequest(
             date_min = 4000.0,
             date_max = 6000.0,
-            culture_filter = CultureFilter(["Yamnaya", "Bell Beaker"]),
+            culture_filter = CultureFilter(true, ["Yamnaya", "Bell Beaker"]),
             include_no_culture = false
         )
         response_filtered = process_query(features, request_filtered)

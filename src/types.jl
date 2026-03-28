@@ -210,8 +210,12 @@ end
 
 Abstract supertype for all selection-based filters.
 
-All subtypes must have a `selected::Vector{String}` field and implement
-`property_key(::MyFilterType)` returning the GeoJSON property key to filter on.
+All subtypes must have:
+- `active::Bool` — when false the filter is off and all features pass through
+- `selected::Vector{String}` — explicit selection, only meaningful when `active` is true
+
+Subtypes must also implement `property_key(::MyFilterType)` returning the GeoJSON
+property key to filter on.
 
 This enables `apply_filter` to dispatch on filter type and look up the correct
 property key without any conditional logic.
@@ -233,18 +237,21 @@ function property_key end
 Specifies which cultures to include in the filter.
 
 # Fields
-- `selected`: Vector of culture names to include (empty = none selected)
+- `active`: Whether the filter is enabled. When false, all samples pass through.
+- `selected`: Vector of culture names to include. Only meaningful when `active` is true.
 
-The interpretation is:
-- Empty array + include_no_culture=false → show nothing
-- Empty array + include_no_culture=true → show only samples without culture
-- Non-empty array → show selected cultures (+ no-culture samples if flag set)
+When `active` is true:
+- Empty `selected` → show nothing (user turned filter on but deselected all)
+- Non-empty `selected` → show only the listed cultures (+ no-culture samples if flag set)
+
+When `active` is false, `selected` is ignored and all samples pass.
 """
 struct CultureFilter <: AbstractSelectionFilter
+    active::Bool
     selected::Vector{String}
 end
 
-CultureFilter() = CultureFilter(String[])
+CultureFilter() = CultureFilter(false, String[])
 property_key(::CultureFilter) = "culture"
 
 """
@@ -253,22 +260,25 @@ property_key(::CultureFilter) = "culture"
 Specifies Y-haplogroup filtering with text search capability.
 
 # Fields
+- `active`: Whether the filter is enabled. When false, all samples pass through.
 - `search_text`: Text to filter haplogroup list (case-insensitive prefix match)
-- `selected`: Vector of haplogroup names to include (empty = none selected)
+- `selected`: Vector of haplogroup names to include. Only meaningful when `active` is true.
 
-The interpretation is:
-- Empty array + include_no_y_haplogroup=false → show nothing
-- Empty array + include_no_y_haplogroup=true → show only samples without Y-haplogroup
-- Non-empty array → show selected haplogroups (+ no-haplogroup samples if flag set)
+When `active` is true:
+- Empty `selected` → show nothing
+- Non-empty `selected` → show selected haplogroups (+ no-haplogroup samples if flag set)
+
+When `active` is false, `selected` is ignored and all samples pass.
 
 Mutually exclusive with YHaplotreeFilter — only one should be active at a time.
 """
 struct YHaplogroupFilter <: AbstractSelectionFilter
+    active::Bool
     search_text::String
     selected::Vector{String}
 end
 
-YHaplogroupFilter() = YHaplogroupFilter("", String[])
+YHaplogroupFilter() = YHaplogroupFilter(false, "", String[])
 property_key(::YHaplogroupFilter) = "y_haplogroup"
 
 """
@@ -277,20 +287,23 @@ property_key(::YHaplogroupFilter) = "y_haplogroup"
 Specifies mtDNA haplogroup filtering with text search capability.
 
 # Fields
+- `active`: Whether the filter is enabled. When false, all samples pass through.
 - `search_text`: Text to filter haplogroup list (case-insensitive prefix match)
-- `selected`: Vector of mtDNA haplogroup names to include (empty = none selected)
+- `selected`: Vector of mtDNA haplogroup names to include. Only meaningful when `active` is true.
 
-The interpretation is:
-- Empty array + include_no_mtdna=false → show nothing
-- Empty array + include_no_mtdna=true → show only samples without mtDNA
-- Non-empty array → show selected haplogroups (+ no-haplogroup samples if flag set)
+When `active` is true:
+- Empty `selected` → show nothing
+- Non-empty `selected` → show selected haplogroups (+ no-haplogroup samples if flag set)
+
+When `active` is false, `selected` is ignored and all samples pass.
 """
 struct MtdnaFilter <: AbstractSelectionFilter
+    active::Bool
     search_text::String
     selected::Vector{String}
 end
 
-MtdnaFilter() = MtdnaFilter("", String[])
+MtdnaFilter() = MtdnaFilter(false, "", String[])
 property_key(::MtdnaFilter) = "mtdna"
 
 """
@@ -299,18 +312,22 @@ property_key(::MtdnaFilter) = "mtdna"
 Specifies which studies/sources to include in the filter.
 
 # Fields
-- `selected`: Vector of source names to include (empty = none selected)
+- `active`: Whether the filter is enabled. When false, all samples pass through.
+- `selected`: Vector of source names to include. Only meaningful when `active` is true.
 
-The interpretation is:
-- Empty array → show nothing
-- Non-empty array → show selected sources
-Samples with no source are always included (see `apply_filters`).
+When `active` is true:
+- Empty `selected` → show nothing
+- Non-empty `selected` → show selected sources
+Samples with no source are always included when the filter is active (see `apply_filters`).
+
+When `active` is false, `selected` is ignored and all samples pass.
 """
 struct SourceFilter <: AbstractSelectionFilter
+    active::Bool
     selected::Vector{String}
 end
 
-SourceFilter() = SourceFilter(String[])
+SourceFilter() = SourceFilter(false, String[])
 property_key(::SourceFilter) = "source"
 
 """

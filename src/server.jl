@@ -113,21 +113,24 @@ function parse_filter_request(payload::Dict)
     include_no_mtdna = get(payload, "includeNoMtdna", true)
     
     # Parse culture filter
+    culture_filter_active = get(payload, "cultureFilterActive", false)
     selected_cultures_raw = get(payload, "selectedCultures", [])
     selected_cultures = String[string(s) for s in selected_cultures_raw]
-    culture_filter = CultureFilter(selected_cultures)
+    culture_filter = CultureFilter(culture_filter_active, selected_cultures)
     
     # Parse Y-haplogroup filter
+    y_haplogroup_filter_active = get(payload, "yHaplogroupFilterActive", false)
     y_search_text = get(payload, "yHaplogroupSearchText", "")
     selected_y_haplogroups_raw = get(payload, "selectedYHaplogroups", [])
     selected_y_haplogroups = String[string(s) for s in selected_y_haplogroups_raw]
-    y_haplogroup_filter = YHaplogroupFilter(y_search_text, selected_y_haplogroups)
+    y_haplogroup_filter = YHaplogroupFilter(y_haplogroup_filter_active, y_search_text, selected_y_haplogroups)
     
     # Parse mtDNA filter
+    mtdna_filter_active = get(payload, "mtdnaFilterActive", false)
     mtdna_search_text = get(payload, "mtdnaSearchText", "")
     selected_mtdna_raw = get(payload, "selectedMtdna", [])
     selected_mtdna = String[string(s) for s in selected_mtdna_raw]
-    mtdna_filter = MtdnaFilter(mtdna_search_text, selected_mtdna)
+    mtdna_filter = MtdnaFilter(mtdna_filter_active, mtdna_search_text, selected_mtdna)
 
     # Parse Y-haplotree filter
     y_haplotree_terms_raw = get(payload, "yHaplotreeTerms", [])
@@ -135,9 +138,10 @@ function parse_filter_request(payload::Dict)
     y_haplotree_filter = YHaplotreeFilter(y_haplotree_terms)
 
     # Parse source filter
+    source_filter_active = get(payload, "sourceFilterActive", false)
     selected_sources_raw = get(payload, "selectedSources", [])
     selected_sources = String[string(s) for s in selected_sources_raw]
-    source_filter = SourceFilter(selected_sources)
+    source_filter = SourceFilter(source_filter_active, selected_sources)
 
     # Parse color settings
     color_by_str = get(payload, "colorBy", nothing)
